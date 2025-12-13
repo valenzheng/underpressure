@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ER Simulation: Nursing Cave 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background-color: #000; }
+
+    /* Cover Screen with Background Image */
+    .cover-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-image: url('cover.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      padding-bottom: 10vh;
+      z-index: 9999;
+    }
+
+    /* Simple Play Button */
+    .play-button {
+      padding: 1rem 3rem;
+      font-size: 2rem;
+      font-weight: bold;
+      color: white;
+      background-color: #ff4444;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .play-button:hover {
+      background-color: #ff2222;
+      transform: translateY(-2px);
+    }
+
+    .play-button:active {
+      transform: translateY(1px);
+    }
+
+    /* --- HOSPITAL MONITOR LOADING SCREEN --- */
+    .loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #000;
+      color: #00ff9d; /* Medical green text */
+      font-family: 'Courier New', monospace; /* Monitor-style font */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9998;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+
+    .loading-screen.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* Status Messages (Single Line, Typed Effect) */
+    .status-container {
+      width: 80%;
+      max-width: 600px;
+      text-align: center;
+      border: 1px solid rgba(0, 255, 157, 0.3);
+      padding: 2rem;
+      border-radius: 5px;
+      position: relative; /* Parent container for ECG */
+    }
+
+    /* ECG Waveform Container (On Top of Messages) */
+    .ecg-container {
+      position: absolute;
+      top: 5px; /* Moved UP to sit above SYSTEM INITIATING message */
+      left: 50%;
+      transform: translateX(-50%);
+      width: 200px; /* Match ECG's x-range (-2.5 to 2.5 = 5 units → scaled to 200px) */
+      height: 50px; /* Vertical space for waveform */
+      z-index: 20; /* Higher z-index to ensure it’s above text */
+      pointer-events: none; /* Allow clicks through to loading screen if needed */
+    }
+
+    .system-init {
+      font-size: 1.2rem;
+      margin-top: 2rem; /* Add top margin to push text down from ECG */
+      margin-bottom: 2rem;
+      opacity: 0;
+      animation: fade-in 1s forwards;
+    }
+
+    .message-line {
+      font-size: 1.1rem;
+      height: 1.5rem; /* Fixed height to prevent layout shift */
+      overflow: hidden;
+      position: relative;
+    }
+
+    .typed-message {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      overflow: hidden;
+      border-right: 2px solid #00ff9d; /* Typing cursor */
+      opacity: 0;
+    }
+
+    .typed-message.active {
+      opacity: 1;
+      animation: typing 1.5s steps(30, end), cursor-blink 0.75s infinite;
+    }
+
+    .typed-message.hidden {
+      opacity: 0;
+      border-right: none;
+    }
+
+    .final-message {
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: #ff4444; /* Emergency red for final alert */
+      margin-top: 2rem;
+      opacity: 0;
+      white-space: nowrap;
+    }
+
+    .final-message.active {
+      animation: fade-in 1s forwards, pulse 1s infinite alternate;
+    }
+
+    /* Animations */
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+
+    @keyframes cursor-blink {
+      from, to { border-color: transparent; }
+      50% { border-color: #00ff9d; }
+    }
+
+    @keyframes pulse {
+      from { opacity: 0.7; }
+      to { opacity: 1; }
+    }
+
+    /* Game Content (Hidden Initially) */
+    #game-content {
+      display: none;
+    }
+
+    /* Existing Game Styles (Preserved) */
+    canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+    .choice-window {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 2rem;
+      border-radius: 10px;
+      font-family: Arial, sans-serif;
+      z-index: 1000;
+      max-width: 600px;
+      display: none;
+    }
+    .choice-window h3 { margin-top: 0; color: #ff4444; }
+    .choice-window .patient-condition {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1rem;
+      border-radius: 5px;
+      margin-bottom: 1.5rem;
+      border-left: 3px solid #ff4444;
+    }
+    .choice-option {
+      padding: 1rem;
+      margin: 0.5rem 0;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid #ff4444;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .choice-option:hover { background: rgba(255, 68, 68, 0.3); }
+    .hover-tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-family: Arial, sans-serif;
+      font-size: 0.9rem;
+      pointer-events: none;
+      z-index: 999;
+      display: none;
+    }
+    .pulse-monitor {
+      position: absolute;
+      top: 0px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #ff4444;
+      border-radius: 10px;
+      padding: 0.5rem;
+      font-family: 'Courier New', monospace;
+      color: white;
+      z-index: 900;
+      min-width: 135px;
+      text-align: center;
+    }
+    .pulse-value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #ff4444;
+      margin: 10px 0;
+      animation: pulse-flash 1s infinite;
+    }
+    .pulse-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    @keyframes pulse-flash {
+      0% { opacity: 0.4; transform: scale(0.95); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0.4; transform: scale(0.95); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Cover Screen (Visible on Load) -->
+  <div class="cover-screen" id="cover-screen">
+    <button class="play-button" id="play-button">Play</button>
+  </div>
+
+  <!-- Loading Screen (Hospital Monitor Style) -->
+  <div class="loading-screen" id="loading-screen">
+    <div class="status-container">
+      <!-- ECG Waveform Container (Added Here) -->
+      <div class="ecg-container" id="ecg-container"></div>
+
+      <div class="system-init">SYSTEM INITIATING</div>
+      <div class="message-line">
+        <div class="typed-message" data-text="LOADING ER ENVIRONMENT..." data-delay="1500">LOADING ER ENVIRONMENT...</div>
+        <div class="typed-message" data-text="CALIBRATING VITAL SIGN MONITORS..." data-delay="4500">CALIBRATING VITAL SIGN MONITORS...</div>
+        <div class="typed-message" data-text="SYNCING PATIENT BIOFEEDBACK DATA..." data-delay="7500">SYNCING PATIENT BIOFEEDBACK DATA...</div>
+        <div class="typed-message" data-text="PREPPING TRAUMA BAY..." data-delay="10500">PREPPING TRAUMA BAY...</div>
+      </div>
+      <div class="final-message" id="final-message">PATIENT ARRIVAL IMMINENT — STANDBY.</div>
+    </div>
+  </div>
+
+  <!-- Game Content (Hidden Until Load Complete) -->
+  <div id="game-content">
+    <!-- Pulse Monitor UI -->
+    <div class="pulse-monitor">
+      <div class="pulse-label">Patient's Pulse (BPM)</div>
+      <div class="pulse-value" id="pulseValue">130</div>
+    </div>
+
+    <!-- Choice Window -->
+    <div class="choice-window" id="choiceWindow">
+      <h3 id="choicePrompt">Patient Assessment</h3>
+      <div class="patient-condition" id="patientCondition">
+        <p><strong>Patient: Jordan R., 28</strong></p>
+        <p><strong>Mechanism of Injury:</strong> Motorcycle crash</p>
+        <p><strong>Current Status:</strong> Pale, cool, clammy skin | Rigid abdomen on palpation</p>
+        <p><strong>Vitals:</strong> Pulse <span id="condPulse">130</span> (weak/thready) | BP 88/60 | Respirations 28/min</p>
+        <p><strong>Complaint:</strong> Severe abdominal pain</p>
+      </div>
+      <div class="choice-options" id="choiceOptions"></div>
+    </div>
+
+    <!-- Hover Tooltip -->
+    <div class="hover-tooltip" id="hoverTooltip">Click to assess patient</div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // ---------------------------
+    // ECG WAVEFORM INIT (Integrated)
+    // ---------------------------
+    let ecgScene, ecgCamera, ecgRenderer;
+    let ecgLine, ecgGeometry;
+    const numPoints = 100;
+    const ecgWave = [
+      0, 0, 0, 0,
+      0.05, 0.1, 0.15, 0.05, 0,
+      -0.15,
+      1.3, // R spike
+      -0.5,
+      0.2, 0.1, 0.05,
+      0, 0, 0, 0, 0,
+    ];
+    let waveIndex = 0;
+    let frameCounter = 0;
+    const framesPerShift = 2; // Controls ECG speed
+
+    function initECG() {
+      const container = document.getElementById('ecg-container');
+      
+      // Create small orthographic scene for ECG
+      ecgScene = new THREE.Scene();
+      // Adjust camera to center waveform vertically (better alignment above text)
+      ecgCamera = new THREE.OrthographicCamera(-2.5, 2.5, 0.8, -0.2, 0.1, 10); 
+      ecgCamera.position.z = 5;
+
+      // Initialize renderer with alpha (transparent background)
+      ecgRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      ecgRenderer.setSize(container.clientWidth, container.clientHeight);
+      ecgRenderer.setPixelRatio(window.devicePixelRatio);
+      container.appendChild(ecgRenderer.domElement);
+
+      // Create ECG line geometry
+      const points = [];
+      const xStart = -2.5;
+      const xEnd = 2.5;
+      const xStep = (xEnd - xStart) / (numPoints - 1);
+
+      for (let i = 0; i < numPoints; i++) {
+        points.push(new THREE.Vector3(xStart + i * xStep, 0, 0));
+      }
+
+      ecgGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      const ecgMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });
+      ecgLine = new THREE.Line(ecgGeometry, ecgMaterial);
+      ecgLine.scale.y = 0.4; // Slightly reduce scale for better fit
+      ecgLine.position.y = 0.1; // Nudge up slightly for perfect alignment
+      ecgScene.add(ecgLine);
+
+      // Resize ECG with window
+      window.addEventListener('resize', () => {
+        ecgRenderer.setSize(container.clientWidth, container.clientHeight);
+      });
+    }
+
+    // ECG Animation Loop
+    function animateECG() {
+      requestAnimationFrame(animateECG);
+
+      frameCounter++;
+      if (frameCounter < framesPerShift) return;
+      frameCounter = 0;
+
+      const pos = ecgGeometry.attributes.position;
+
+      // Shift points left
+      for (let i = 0; i < numPoints - 1; i++) {
+        pos.setY(i, pos.getY(i + 1));
+      }
+
+      // Insert next ECG sample
+      pos.setY(numPoints - 1, ecgWave[waveIndex]);
+      waveIndex = (waveIndex + 1) % ecgWave.length;
+
+      pos.needsUpdate = true;
+      ecgRenderer.render(ecgScene, ecgCamera);
+    }
+
+    // DOM Elements for Screens
+    const coverScreen = document.getElementById('cover-screen');
+    const playButton = document.getElementById('play-button');
+    const loadingScreen = document.getElementById('loading-screen');
+    const typedMessages = document.querySelectorAll('.typed-message');
+    const finalMessage = document.getElementById('final-message');
+    const gameContent = document.getElementById('game-content');
+
+    // Play Button Click: Trigger Loading Screen + Start ECG
+    playButton.addEventListener('click', () => {
+      coverScreen.style.display = 'none';
+      loadingScreen.classList.add('active');
+      initECG(); // Initialize ECG when loading starts
+      animateECG(); // Start ECG animation
+      startLoadingSequence();
+    });
+
+    // Loading Sequence Logic (Preserved)
+    function startLoadingSequence() {
+      typedMessages.forEach((message, index) => {
+        const delay = parseInt(message.dataset.delay);
+        const nextMessage = typedMessages[index + 1];
+
+        setTimeout(() => {
+          message.classList.add('active');
+          
+          setTimeout(() => {
+            message.classList.remove('active');
+            message.classList.add('hidden');
+            
+            if (!nextMessage) {
+              setTimeout(() => {
+                finalMessage.classList.add('active');
+                setTimeout(() => {
+                  loadingScreen.classList.remove('active');
+                  setTimeout(() => {
+                    loadingScreen.style.display = 'none';
+                    gameContent.style.display = 'block';
+                    initGame();
+                  }, 500);
+                }, 1500);
+              }, 500);
+            }
+          }, 2500);
+        }, delay);
+      });
+    }
+
+    // Game Variables (Preserved)
+    let scene, camera, renderer, controls, raycaster, mouse;
+    let erRoom, patientModel;
+    let ambientLight, directionalLight, emergencyLights;
+    let vitals = { pulse: 130, bpSystolic: 88, bpDiastolic: 60, respirations: 28 };
+    let gameState = { 
+      currentScenario: 1, 
+      isPatientStable: false,
+      lastVitalUpdate: Date.now(),
+      vitalDropInterval: 5000,
+      hasFirstScenarioTriggered: false,
+      isZooming: false,
+      originalCameraPos: new THREE.Vector3(0, 2, -2),
+      targetCameraPos: new THREE.Vector3(0.5, 1.2, 0.8)
+    };
+
+    // DOM Elements (Preserved)
+    const choiceWindow = document.getElementById('choiceWindow');
+    const choicePrompt = document.getElementById('choicePrompt');
+    const patientCondition = document.getElementById('patientCondition');
+    const choiceOptions = document.getElementById('choiceOptions');
+    const hoverTooltip = document.getElementById('hoverTooltip');
+    const pulseValueUI = document.getElementById('pulseValue');
+    const condPulseUI = document.getElementById('condPulse');
+
+    // Initialize Game (Preserved)
+    function initGame() {
+      initBoilerplate();
+      loadAssets();
+      animate();
+    }
+
+    // Rest of Game Logic (Preserved Unchanged)
+    function initBoilerplate() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 10000);
+      camera.position.copy(gameState.originalCameraPos);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document.body.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.minDistance = 0.5;
+      controls.maxDistance = 8;
+      controls.maxPolarAngle = Math.PI / 2 - 0.1;
+      controls.target.set(1.75, 0.75, 1.3);
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+      window.addEventListener('mousemove', (e) => {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        hoverTooltip.style.left = `${e.clientX + 10}px`;
+        hoverTooltip.style.top = `${e.clientY - 20}px`;
+      });
+      window.addEventListener('click', handleMouseClick);
+
+      ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+      directionalLight = new THREE.DirectionalLight(0xffffdd, 1.5);
+      directionalLight.position.set(5, 8, 3);
+      emergencyLights = new THREE.PointLight(0xff4444, 0.3, 10);
+      emergencyLights.position.set(2, 3, 2);
+      scene.add(ambientLight, directionalLight, emergencyLights);
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function loadAssets() {
+      const loader = new GLTFLoader();
+      loader.load('er_room.glb', (gltf) => {
+        erRoom = gltf.scene;
+        erRoom.scale.set(1, 1, 1);
+        erRoom.position.y = 0;
+        scene.add(erRoom);
+        loadPatient();
+      }, (xhr) => console.log(`ER Room: ${(xhr.loaded/xhr.total*100).toFixed(1)}%`), 
+      (error) => alert('Failed to load er_room.glb'));
+    }
+
+    function loadPatient() {
+      const loader = new GLTFLoader();
+      loader.load('patient.glb', (gltf) => {
+        patientModel = gltf.scene;
+        patientModel.scale.set(0.022, 0.022, 0.022);
+        patientModel.position.set(1.75, 0.75, 1.3);
+        patientModel.rotation.y = Math.PI;
+        scene.add(patientModel);
+        controls.target.copy(patientModel.position);
+        startGame();
+      }, (xhr) => console.log(`Patient: ${(xhr.loaded/xhr.total*100).toFixed(1)}%`),
+      (error) => alert('Failed to load patient.glb'));
+    }
+
+    function startGame() {
+      console.log('Game started! Vitals:', vitals);
+      gameState.lastVitalUpdate = Date.now();
+      updatePulseUI();
+    }
+
+    function zoomToPatient() {
+      gameState.isZooming = true;
+      controls.enabled = false;
+      const duration = 1000;
+      const startTime = Date.now();
+      function animateZoom() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed/duration, 1);
+        const easeProgress = easeInOutCubic(progress);
+        camera.position.lerpVectors(gameState.originalCameraPos, gameState.targetCameraPos, easeProgress);
+        if (progress < 1) requestAnimationFrame(animateZoom);
+        else {
+          gameState.isZooming = false;
+          controls.enabled = true;
+          showFirstScenario();
+        }
+      }
+      animateZoom();
+    }
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+    }
+
+    function handleMouseClick() {
+      if (!patientModel || gameState.hasFirstScenarioTriggered || gameState.isZooming) return;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(patientModel, true);
+      if (intersects.length > 0) {
+        gameState.hasFirstScenarioTriggered = true;
+        hoverTooltip.style.display = 'none';
+        zoomToPatient();
+      }
+    }
+
+    function checkPatientHover() {
+      if (!patientModel || gameState.hasFirstScenarioTriggered || gameState.isZooming) {
+        hoverTooltip.style.display = 'none';
+        return;
+      }
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(patientModel, true);
+      hoverTooltip.style.display = intersects.length > 0 ? 'block' : 'none';
+    }
+
+    function updatePulseUI() {
+      pulseValueUI.textContent = vitals.pulse;
+      condPulseUI.textContent = vitals.pulse;
+      const animationSpeed = 60 / vitals.pulse;
+      pulseValueUI.style.animationDuration = `${animationSpeed}s`;
+    }
+
+    function updateVitals() {
+      const now = Date.now();
+      if (now - gameState.lastVitalUpdate > gameState.vitalDropInterval) {
+        if (!gameState.isPatientStable) {
+          vitals.pulse += 5;
+          vitals.bpSystolic -= 2;
+          vitals.bpDiastolic -= 1;
+          vitals.respirations += 2;
+
+          if (vitals.bpSystolic < 70) {
+            gameState.hasFirstScenarioTriggered = true;
+            triggerEmergencyScenario();
+          }
+          updatePulseUI();
+          console.log('Vitals worsened | Pulse:', vitals.pulse);
+        }
+        gameState.lastVitalUpdate = now;
+      }
+    }
+
+    function showFirstScenario() {
+      choicePrompt.textContent = "Based on the patient's condition, what is the FIRST priority intervention?";
+      choiceOptions.innerHTML = '';
+      [
+        { text: "A. Start a full head-to-toe assessment", correct: false, pulseChange: +15 },
+        { text: "B. Call for imaging (CT abdomen)", correct: false, pulseChange: +20 },
+        { text: "C. Begin rapid IV fluid resuscitation", correct: true, pulseChange: -10 },
+        { text: "D. Ask the patient for their medical history", correct: false, pulseChange: +15 }
+      ].forEach((option) => {
+        const div = document.createElement('div');
+        div.className = 'choice-option';
+        div.textContent = option.text;
+        div.addEventListener('click', () => handleAnswer(option.correct, option.pulseChange));
+        choiceOptions.appendChild(div);
+      });
+      choiceWindow.style.display = 'block';
+    }
+
+    function handleAnswer(isCorrect, pulseChange) {
+      choiceWindow.style.display = 'none';
+      
+      vitals.pulse += pulseChange;
+      vitals.pulse = Math.max(100, Math.min(vitals.pulse, 200));
+      updatePulseUI();
+
+      if (isCorrect) {
+        gameState.isPatientStable = true;
+        vitals.bpSystolic += 5;
+        alert(`Correct! Pulse stabilized to ${vitals.pulse} BPM. Patient improves temporarily.`);
+        gameState.currentScenario = 2;
+      } else {
+        gameState.isPatientStable = false;
+        vitals.bpSystolic -= 10;
+        alert(`Incorrect! Pulse increased to ${vitals.pulse} BPM. Patient decompensating!`);
+      }
+    }
+
+    function triggerEmergencyScenario() {
+      if (camera.position.distanceTo(gameState.targetCameraPos) > 0.1) {
+        gameState.isZooming = true;
+        controls.enabled = false;
+        const duration = 800;
+        const startTime = Date.now();
+        function emergencyZoom() {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed/duration, 1);
+          camera.position.lerpVectors(camera.position, gameState.targetCameraPos, progress);
+          if (progress < 1) requestAnimationFrame(emergencyZoom);
+          else {
+            gameState.isZooming = false;
+            controls.enabled = true;
+            showEmergencyWindow();
+          }
+        }
+        emergencyZoom();
+      } else showEmergencyWindow();
+    }
+
+    function showEmergencyWindow() {
+      patientCondition.style.display = 'none';
+      choicePrompt.textContent = "UNSTABLE VITALS – ACT NOW!";
+      choiceOptions.innerHTML = '';
+      [
+        { text: "A. Comfort the patient", correct: false, pulseChange: +25 },
+        { text: "B. Document findings", correct: false, pulseChange: +30 },
+        { text: "C. Notify trauma team—suspected internal hemorrhage", correct: true, pulseChange: -15 },
+        { text: "D. Reassess temperature", correct: false, pulseChange: +25 }
+      ].forEach((option) => {
+        const div = document.createElement('div');
+        div.className = 'choice-option';
+        div.textContent = option.text;
+        div.addEventListener('click', () => {
+          choiceWindow.style.display = 'none';
+          patientCondition.style.display = 'block';
+          vitals.pulse += option.pulseChange;
+          vitals.pulse = Math.max(100, Math.min(vitals.pulse, 200));
+          updatePulseUI();
+          if (option.correct) {
+            gameState.isPatientStable = true;
+            vitals.bpSystolic += 15;
+            alert(`Success! Pulse drops to ${vitals.pulse} BPM. Trauma team en route.`);
+            gameState.currentScenario = 3;
+          } else {
+            alert(`FATAL ERROR: Pulse hits ${vitals.pulse} BPM. Cardiac arrest! Simulation ends.`);
+            location.reload();
+          }
+        });
+        choiceOptions.appendChild(div);
+      });
+      choiceWindow.style.display = 'block';
+    }
+
+    function checkObjectInteraction() {
+      if (!patientModel || gameState.currentScenario !== 2 || gameState.isZooming) return;
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(patientModel, true);
+      if (intersects.length > 0) {
+        gameState.currentScenario = 2.5;
+        patientCondition.style.display = 'none';
+        setTimeout(() => {
+          choicePrompt.textContent = "What is most likely happening internally?";
+          choiceOptions.innerHTML = '';
+          [
+            { text: "A. Pneumothorax", correct: false, pulseChange: +15 },
+            { text: "B. Internal hemorrhage", correct: true, pulseChange: -10 },
+            { text: "C. Cardiac tamponade", correct: false, pulseChange: +15 },
+            { text: "D. Anxiety-induced hyperventilation", correct: false, pulseChange: +10 }
+          ].forEach((option) => {
+            const div = document.createElement('div');
+            div.className = 'choice-option';
+            div.textContent = option.text;
+            div.addEventListener('click', () => {
+              choiceWindow.style.display = 'none';
+              patientCondition.style.display = 'block';
+              vitals.pulse += option.pulseChange;
+              vitals.pulse = Math.max(100, Math.min(vitals.pulse, 200));
+              updatePulseUI();
+              if (option.correct) {
+                alert(`Correct! Pulse stabilizes to ${vitals.pulse} BPM. Prepare for transfusion.`);
+                gameState.currentScenario = 4;
+              } else {
+                alert(`Incorrect! Pulse rises to ${vitals.pulse} BPM. Condition worsens.`);
+              }
+            });
+            choiceOptions.appendChild(div);
+          });
+          choiceWindow.style.display = 'block';
+        }, 1000);
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      emergencyLights.intensity = 0.3 + Math.sin(Date.now()*0.001)*0.1;
+      updateVitals();
+      checkPatientHover();
+      checkObjectInteraction();
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+</html>
