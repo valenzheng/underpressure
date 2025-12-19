@@ -352,6 +352,13 @@
     <div class="hover-tooltip" id="hoverTooltip">Click to assess patient</div>
   </div>
 
+  <!-- Audio Elements (Hidden) -->
+  <audio id="erBackground" src="erbackground.mp3" loop preload="auto" volume="0.45"></audio>
+  <audio id="normalBeep" src="heartbeat/normalbeep.mp3" loop preload="auto" volume="0.5"> ></audio>
+  <audio id="fastBeep" src="heartbeat/fastbeep.mp3" loop preload="auto" volume="0.5"> ></audio>
+  <audio id="worseningBeep" src="heartbeat/worseningbeep.mp3" loop preload="auto" volume="0.5"> ></audio>
+  <audio id="flatlineBeep" src="heartbeat/flatlinebeep.mp3" loop preload="auto" volume="0.5"> ></audio>
+
   <script type="importmap">
     {
       "imports": {
@@ -365,6 +372,58 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // ---------------------------
+    // AUDIO INIT
+    // ---------------------------
+    const audioElements = {
+      background: document.getElementById('erBackground'),
+      normal: document.getElementById('normalBeep'),
+      fast: document.getElementById('fastBeep'),
+      worsening: document.getElementById('worseningBeep'),
+      flatline: document.getElementById('flatlineBeep')
+    };
+
+    // Track current active heart beat sound
+    let currentBeatSound = null;
+
+    // Function to stop all beat sounds
+    function stopAllBeatSounds() {
+      Object.values(audioElements).forEach(sound => {
+        if (sound !== audioElements.background) {
+          sound.pause();
+          sound.currentTime = 0;
+        }
+      });
+      currentBeatSound = null;
+    }
+
+    // Function to play specific beat sound based on pulse color
+    function playBeatSoundByColor(colorClass) {
+      stopAllBeatSounds();
+      
+      switch(colorClass) {
+        case 'pulse-green':
+          currentBeatSound = audioElements.normal;
+          break;
+        case 'pulse-yellow':
+          currentBeatSound = audioElements.fast;
+          break;
+        case 'pulse-red':
+          currentBeatSound = audioElements.worsening;
+          break;
+        default:
+          currentBeatSound = audioElements.normal;
+      }
+      
+      currentBeatSound.play().catch(err => {
+        console.log('Audio play failed (user interaction required):', err);
+        // Fallback: Try again on first user click
+        document.addEventListener('click', () => {
+          currentBeatSound.play().catch(err => console.log('Audio still failed:', err));
+        }, { once: true });
+      });
+    }
 
     // ---------------------------
     // ECG WAVEFORM INIT (Integrated)
@@ -484,6 +543,14 @@
                   setTimeout(() => {
                     loadingScreen.style.display = 'none';
                     gameContent.style.display = 'block';
+                    // 加载页面结束后启动背景音（循环播放）
+                    audioElements.background.play().catch(err => {
+                      console.log('Background audio play failed:', err);
+                      // 浏览器 autoplay 限制 fallback：首次点击后重试
+                      document.addEventListener('click', () => {
+                        audioElements.background.play().catch(err => console.log('背景音启动失败:', err));
+                      }, { once: true });
+                    });
                     initGame();
                   }, 500);
                 }, 1500);
@@ -675,6 +742,8 @@
       initBoilerplate();
       loadAssets();
       animate();
+      // Start initial beat sound (matches initial yellow pulse)
+      playBeatSoundByColor('pulse-yellow');
     }
 
     // Game Setup (Updated with Patient Click Trigger)
@@ -931,13 +1000,20 @@
 
       // Update pulse color (Green/Yellow/Red based on BPM ranges)
       pulseValueUI.classList.remove('pulse-green', 'pulse-yellow', 'pulse-red');
+      let currentColorClass = '';
       if (displayPulse >= 100 && displayPulse <= 120) {
-        pulseValueUI.classList.add('pulse-green'); // Stable
+        currentColorClass = 'pulse-green'; // Stable
+        pulseValueUI.classList.add(currentColorClass);
       } else if ((displayPulse > 120 && displayPulse <= 140) || (displayPulse < 100 && displayPulse >= 80)) {
-        pulseValueUI.classList.add('pulse-yellow'); // Instability
+        currentColorClass = 'pulse-yellow'; // Instability
+        pulseValueUI.classList.add(currentColorClass);
       } else {
-        pulseValueUI.classList.add('pulse-red'); // Critical (<80 or >140)
+        currentColorClass = 'pulse-red'; // Critical (<80 or >140)
+        pulseValueUI.classList.add(currentColorClass);
       }
+
+      // Update beat sound to match current color
+      playBeatSoundByColor(currentColorClass);
 
       vitals.lastPulseChange = Date.now();
     }
@@ -973,6 +1049,17 @@
     function endSimulation(isSuccess) {
       choiceWindow.style.display = 'none';
       feedbackPanel.style.display = 'none';
+
+      // 游戏结束时停止所有音频
+      audioElements.background.pause(); // 停止背景音
+      stopAllBeatSounds();
+      
+      if (!isSuccess) {
+        // 失败时播放 flatline 音
+        audioElements.flatline.play().catch(err => {
+          console.log('Flatline audio play failed:', err);
+        });
+      }
 
       // Create end screen overlay matching PDF requirements
       const endScreen = document.createElement('div');
@@ -1027,7 +1114,11 @@
       restartButton.style.borderRadius = '5px';
       restartButton.style.cursor = 'pointer';
       restartButton.textContent = 'Play Again';
-      restartButton.addEventListener('click', () => location.reload());
+      restartButton.addEventListener('click', () => {
+        // Stop flatline sound before reloading
+        audioElements.flatline.pause();
+        location.reload();
+      });
 
       endScreen.appendChild(endTitle);
       endScreen.appendChild(endMessage);
