@@ -3,7 +3,7 @@
 
 ![image](https://github.com/valenzheng/underpressure/blob/main/cover.png)
 
-Step into the fast-paced world of emergency medicine with Under Pressure, a 3D ER simulation for nursing students and healthcare learners. Built for CS 460 – Graphics, this experience places you in a chaotic emergency room projected across four walls. Every decision matters. No resets, no retries.
+Step into the fast paced world of emergency medicine with Under Pressure, a 3D ER simulation for nursing students and healthcare learners. Built for CS 460 – Graphics, this experience places you in a chaotic emergency room projected across four walls. Every decision matters. No resets, no retries.
 
 You’ll face a critical trauma case: Jordan R., a 28 year old involved in a motorcycle crash, battling hypovolemic shock and potential internal bleeding. Your role is to make rapid, evidence based decisions to stabilize vital signs, recognize shock, and prioritize life saving interventions. The clock is ticking. Wrong choices accumulate, accelerating heart rate decline, intensifying audio and visual stress, and ultimately leading to cardiac arrest if critical thresholds are crossed.
 
