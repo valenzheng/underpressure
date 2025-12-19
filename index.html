@@ -236,10 +236,13 @@
     .pulse-value {
       font-size: 2.5rem;
       font-weight: bold;
-      color: #ff4444;
       margin: 10px 0;
       animation: pulse-flash 1s infinite;
     }
+    /* Pulse Color Classes */
+    .pulse-green { color: #00ff9d; } /* Stable: 100-120 BPM */
+    .pulse-yellow { color: #ffff00; } /* Instability: 120-140 BPM or rapidly falling */
+    .pulse-red { color: #ff4444; } /* Critical: <80 BPM and dropping */
     .pulse-label {
       font-size: 0.75rem;
       text-transform: uppercase;
@@ -249,6 +252,48 @@
       0% { opacity: 0.4; transform: scale(0.95); }
       50% { opacity: 1; transform: scale(1.05); }
       100% { opacity: 0.4; transform: scale(0.95); }
+    }
+
+    /* Feedback Panel (Replaces Alerts) */
+    .feedback-panel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      color: white;
+      padding: 1.5rem 2rem;
+      border-radius: 10px;
+      font-family: Arial, sans-serif;
+      z-index: 1001;
+      max-width: 500px;
+      text-align: center;
+      display: none;
+      border: 2px solid;
+    }
+    .feedback-correct { border-color: #00ff9d; }
+    .feedback-incorrect { border-color: #ff4444; }
+    .feedback-panel h4 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+    .feedback-panel p {
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .next-button {
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      color: white;
+      background-color: #ff4444;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .next-button:hover {
+      background-color: #ff2222;
     }
   </style>
 </head>
@@ -280,7 +325,7 @@
     <!-- Pulse Monitor UI -->
     <div class="pulse-monitor">
       <div class="pulse-label">Patient's Pulse (BPM)</div>
-      <div class="pulse-value" id="pulseValue">130</div>
+      <div class="pulse-value pulse-yellow" id="pulseValue">130</div> <!-- Starts yellow (130 BPM = instability) -->
     </div>
 
     <!-- Choice Window -->
@@ -290,13 +335,20 @@
         <p><strong>Patient: Jordan R., 28</strong></p>
         <p><strong>Mechanism of Injury:</strong> Motorcycle crash</p>
         <p><strong>Current Status:</strong> Pale, cool, clammy skin | Rigid abdomen on palpation</p>
-        <p><strong>Vitals:</strong> Pulse <span id="condPulse">130</span> (weak/thready) | BP 88/60 | Respirations 28/min</p>
+        <p><strong>Vitals:</strong> Pulse <span id="condPulse">130</span> (weak/thready) | BP <span id="condBp">88/60</span> | Respirations <span id="condResp">28</span>/min</p>
         <p><strong>Complaint:</strong> Severe abdominal pain</p>
       </div>
       <div class="choice-options" id="choiceOptions"></div>
     </div>
 
-    <!-- Hover Tooltip -->
+    <!-- Feedback Panel (Replaces Alerts) -->
+    <div class="feedback-panel" id="feedbackPanel">
+      <h4 id="feedbackTitle"></h4>
+      <p id="feedbackMessage"></p>
+      <button class="next-button" id="nextButton">Continue</button>
+    </div>
+
+    <!-- Hover Tooltip (Active for First Patient Click) -->
     <div class="hover-tooltip" id="hoverTooltip">Click to assess patient</div>
   </div>
 
@@ -442,43 +494,194 @@
       });
     }
 
-    // Game Variables (Preserved)
+    // Game Variables (Updated with Strict Pulse Bounds)
     let scene, camera, renderer, controls, raycaster, mouse;
     let erRoom, patientModel;
     let ambientLight, directionalLight, emergencyLights;
-    let vitals = { pulse: 130, bpSystolic: 88, bpDiastolic: 60, respirations: 28 };
+    let vitals = { 
+      pulse: 130, // Initial pulse (matches PDF)
+      bpSystolic: 88, 
+      bpDiastolic: 60, 
+      respirations: 28,
+      consecutiveWrongAnswers: 0,
+      lastPulseChange: Date.now()
+    };
+    const PULSE_MIN = 60; // Realistic minimum BPM (no lower than this)
+    const PULSE_MAX = 220; // Realistic maximum BPM (arrest threshold)
     let gameState = { 
-      currentScenario: 1, 
+      currentScenario: 1, // 1-10 matching PDF scenarios
       isPatientStable: false,
       lastVitalUpdate: Date.now(),
       vitalDropInterval: 5000,
-      hasFirstScenarioTriggered: false,
-      isZooming: false,
-      originalCameraPos: new THREE.Vector3(0, 2, -2),
-      targetCameraPos: new THREE.Vector3(0.5, 1.2, 0.8)
+      ivPenaltyActive: false, // For scenario 5 penalty (faster pulse drop for 2 questions)
+      penaltyQuestionCount: 0, // Track questions remaining for IV penalty
+      firstQuestionTriggered: false // Track if first question was activated by patient click
     };
 
-    // DOM Elements (Preserved)
+    // DOM Elements (Updated with Feedback Panel)
     const choiceWindow = document.getElementById('choiceWindow');
     const choicePrompt = document.getElementById('choicePrompt');
     const patientCondition = document.getElementById('patientCondition');
     const choiceOptions = document.getElementById('choiceOptions');
+    const feedbackPanel = document.getElementById('feedbackPanel');
+    const feedbackTitle = document.getElementById('feedbackTitle');
+    const feedbackMessage = document.getElementById('feedbackMessage');
+    const nextButton = document.getElementById('nextButton');
     const hoverTooltip = document.getElementById('hoverTooltip');
     const pulseValueUI = document.getElementById('pulseValue');
     const condPulseUI = document.getElementById('condPulse');
+    const condBpUI = document.getElementById('condBp');
+    const condRespUI = document.getElementById('condResp');
 
-    // Initialize Game (Preserved)
+    // All 10 Scenarios from PDF (Exact Prompts/Options/Correct Answers)
+    const scenarios = [
+      // Scenario 1: Initial Assessment Window (Triggered by patient click)
+      {
+        prompt: "What is the FIRST priority intervention?",
+        options: [
+          { text: "A. Start a full head-to-toe assessment", correct: false, pulseChange: +10 },
+          { text: "B. Call for imaging (CT abdomen)", correct: false, pulseChange: +12 },
+          { text: "C. Begin rapid IV fluid resuscitation", correct: true, pulseChange: -8 },
+          { text: "D. Ask the patient for their medical history", correct: false, pulseChange: +10 }
+        ],
+        correctFeedback: "Correct! Signs of hypovolemic shock require immediate fluid resuscitation to maintain circulation.",
+        incorrectFeedback: "Incorrect. Shock requires immediate fluid resuscitation, not delayed assessment or imaging. Pulse will drop faster.",
+        bpChange: { systolic: 0, diastolic: 0 }
+      },
+      // Scenario 2: Wound/Abdomen Assessment
+      {
+        prompt: "What is most likely happening internally?",
+        options: [
+          { text: "A. Pneumothorax", correct: false, pulseChange: +15 },
+          { text: "B. Internal hemorrhage", correct: true, pulseChange: -10 },
+          { text: "C. Cardiac tamponade", correct: false, pulseChange: +15 },
+          { text: "D. Anxiety-induced hyperventilation", correct: false, pulseChange: +12 }
+        ],
+        correctFeedback: "Correct! Abdominal rigidity, trauma mechanism and shock vitals strongly indicate internal bleeding.",
+        incorrectFeedback: "Incorrect. Abdominal trauma with rigid abdomen suggests internal hemorrhage. Heart rate will drop faster over time.",
+        bpChange: { systolic: -2, diastolic: -1 }
+      },
+      // Scenario 3: Shock Recognition
+      {
+        prompt: "Which type of shock best fits this presentation?",
+        options: [
+          { text: "A. Hypovolemic shock", correct: true, pulseChange: -7 },
+          { text: "B. Cardiogenic shock", correct: false, pulseChange: +10 },
+          { text: "C. Septic shock", correct: false, pulseChange: +10 },
+          { text: "D. Neurogenic shock", correct: false, pulseChange: +10 }
+        ],
+        correctFeedback: "Correct! Blood loss causes low blood pressure, rapid pulse and poor tissue perfusion.",
+        incorrectFeedback: "Incorrect. This is hypovolemic shock from blood loss. BP will decrease more rapidly.",
+        bpChange: { systolic: -3, diastolic: -2 }
+      },
+      // Scenario 4: Primary Survey Priority
+      {
+        prompt: "Which assessment framework should guide care RIGHT NOW?",
+        options: [
+          { text: "A. Head-to-toe assessment", correct: false, pulseChange: +8 },
+          { text: "B. ABCs / Primary survey", correct: true, pulseChange: -6 },
+          { text: "C. Pain assessment", correct: false, pulseChange: +8 },
+          { text: "D. Secondary survey", correct: false, pulseChange: +8 }
+        ],
+        correctFeedback: "Correct! Life-threatening problems must be addressed before secondary assessments.",
+        incorrectFeedback: "Incorrect. Primary survey (ABCs) takes priority in unstable patients. Heart rate will decline gradually.",
+        bpChange: { systolic: -2, diastolic: -1 }
+      },
+      // Scenario 5: Access Decision: IV Supplies
+      {
+        prompt: "Which IV access is most appropriate RIGHT NOW?",
+        options: [
+          { text: "A. 24-gauge IV in hand", correct: false, pulseChange: +15 },
+          { text: "B. 20-gauge in wrist", correct: false, pulseChange: +12 },
+          { text: "C. 18-gauge in antecubital", correct: true, pulseChange: -9 },
+          { text: "D. No IV-give oral fluids", correct: false, pulseChange: +20 }
+        ],
+        correctFeedback: "Correct! Large-bore IV access allows rapid delivery of fluids and blood.",
+        incorrectFeedback: "Incorrect. IV too small, fluids infusing too slowly... Pulse will drop faster for the next two questions.",
+        bpChange: { systolic: -2, diastolic: -1 },
+        penalty: "ivPenalty"
+      },
+      // Scenario 6: Fluid Choice Judgment
+      {
+        prompt: "Which fluid is most appropriate initially?",
+        options: [
+          { text: "A. D5W", correct: false, pulseChange: +10 },
+          { text: "B. Normal saline", correct: false, pulseChange: +8 },
+          { text: "C. Oral fluids", correct: false, pulseChange: +15 },
+          { text: "D. Lactated Ringer’s", correct: true, pulseChange: -7 }
+        ],
+        correctFeedback: "Correct! Lactated Ringer’s is commonly used to restore volume in trauma patients.",
+        incorrectFeedback: "Incorrect. Minimal improvement in vitals, heart rate remains unstable.",
+        bpChange: { systolic: +1, diastolic: +1 } // Minimal improvement if wrong
+      },
+      // Scenario 7: Critical Decision: Blood Transfusion (BP drops to 78/54)
+      {
+        prompt: "What should a nurse do next?",
+        options: [
+          { text: "A. Increase fluid rate", correct: false, pulseChange: +18 },
+          { text: "B. Prepare for emergency blood transfusion", correct: true, pulseChange: -12 },
+          { text: "C. Wait for the doctor to arrive", correct: false, pulseChange: +25 },
+          { text: "D. Get a CT scan quickly", correct: false, pulseChange: +22 }
+        ],
+        correctFeedback: "Correct! Persistent hypotension after fluids indicates ongoing blood loss.",
+        incorrectFeedback: "Incorrect. One more wrong answer will cause cardiac arrest.",
+        bpChange: { systolic: -10, diastolic: -6 }, // BP drops to 78/54
+        critical: true
+      },
+      // Scenario 8: Blood Timing Concept
+      {
+        prompt: "When is blood indicated in trauma resuscitation?",
+        options: [
+          { text: "A. After CT confirms bleeding", correct: false, pulseChange: +15 },
+          { text: "B. When BP remains unstable despite fluids", correct: true, pulseChange: -10 },
+          { text: "C. Only after labs return", correct: false, pulseChange: +18 },
+          { text: "D. When pain is controlled", correct: false, pulseChange: +15 }
+        ],
+        correctFeedback: "Correct! Blood is required when fluids alone cannot stabilize circulation.",
+        incorrectFeedback: "Incorrect. Sudden heart rate drop, patient is in near-failure state.",
+        bpChange: { systolic: -5, diastolic: -3 }
+      },
+      // Scenario 9: Imaging vs Stability Trap
+      {
+        prompt: "Why is CT imaging NOT the priority right now?",
+        options: [
+          { text: "A. CT takes too long to schedule", correct: false, pulseChange: +12 },
+          { text: "B. Imaging worsens bleeding", correct: false, pulseChange: +12 },
+          { text: "C. The patient is hemodynamically unstable", correct: true, pulseChange: -8 },
+          { text: "D. CT is only for fractures", correct: false, pulseChange: +15 }
+        ],
+        correctFeedback: "Correct! Unstable patients must be stabilized before imaging.",
+        incorrectFeedback: "Incorrect. Heart rhythm becomes irregular, one final chance remains.",
+        bpChange: { systolic: -5, diastolic: -3 }
+      },
+      // Scenario 10: Final Pressure Moment
+      {
+        prompt: "What is your PRIORITY action?",
+        options: [
+          { text: "A. Comfort the patient", correct: false, pulseChange: +30 },
+          { text: "B. Document findings", correct: false, pulseChange: +35 },
+          { text: "C. Reassess temperature", correct: false, pulseChange: +30 },
+          { text: "D. Notify trauma team-suspected internal hemorrhage", correct: true, pulseChange: -15 },
+        ],
+        correctFeedback: "Correct! Rapid escalation ensures immediate surgical intervention.",
+        incorrectFeedback: "Incorrect. Fatal delay, cardiac arrest occurs.",
+        bpChange: { systolic: -10, diastolic: -5 },
+        final: true
+      }
+    ];
+
+    // Initialize Game
     function initGame() {
       initBoilerplate();
       loadAssets();
       animate();
     }
 
-    // Rest of Game Logic (Preserved Unchanged)
+    // Game Setup (Updated with Patient Click Trigger)
     function initBoilerplate() {
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 10000);
-      camera.position.copy(gameState.originalCameraPos);
+      camera.position.set(0, 2, -2); // Original camera position (not zoomed)
 
       renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -503,6 +706,7 @@
       });
       window.addEventListener('click', handleMouseClick);
 
+      // Lighting
       ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
       directionalLight = new THREE.DirectionalLight(0xffffdd, 1.5);
       directionalLight.position.set(5, 8, 3);
@@ -511,8 +715,24 @@
       scene.add(ambientLight, directionalLight, emergencyLights);
 
       window.addEventListener('resize', onWindowResize);
+
+      // Next Button Click: Progress to Next Scenario (Automatic after first question)
+      nextButton.addEventListener('click', () => {
+        feedbackPanel.style.display = 'none';
+        gameState.currentScenario++;
+        
+        // Check if all scenarios are completed
+        if (gameState.currentScenario > scenarios.length) {
+          endSimulation(true);
+          return;
+        }
+
+        // Show next scenario AUTOMATICALLY (no more clicks needed)
+        showScenario(gameState.currentScenario - 1);
+      });
     }
 
+    // Load 3D Assets
     function loadAssets() {
       const loader = new GLTFLoader();
       loader.load('er_room.glb', (gltf) => {
@@ -539,27 +759,64 @@
       (error) => alert('Failed to load patient.glb'));
     }
 
+    // Start Game: Wait for Patient Click to Trigger First Question
     function startGame() {
-      console.log('Game started! Vitals:', vitals);
+      console.log('Game started! Click patient to begin assessment.');
       gameState.lastVitalUpdate = Date.now();
-      updatePulseUI();
+      updateVitalUI();
+      // No automatic scenario - wait for patient click
     }
 
-    function zoomToPatient() {
+    // Handle Patient Click (Triggers First Question)
+    function handleMouseClick() {
+      if (!patientModel || gameState.firstQuestionTriggered || gameState.isZooming) return;
+      
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(patientModel, true);
+      
+      if (intersects.length > 0) {
+        gameState.firstQuestionTriggered = true;
+        hoverTooltip.style.display = 'none'; // Hide tooltip after first click
+        
+        // Zoom to patient for better immersion
+        zoomToPatient(() => {
+          showScenario(0); // Show first scenario (index 0) after zoom
+        });
+      }
+    }
+
+    // Check for Patient Hover (Show Tooltip Before First Click)
+    function checkPatientHover() {
+      if (!patientModel || gameState.firstQuestionTriggered || gameState.isZooming || choiceWindow.style.display === 'block') {
+        hoverTooltip.style.display = 'none';
+        return;
+      }
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObject(patientModel, true);
+      hoverTooltip.style.display = intersects.length > 0 ? 'block' : 'none';
+    }
+
+    // Zoom to Patient with Callback
+    function zoomToPatient(callback) {
       gameState.isZooming = true;
       controls.enabled = false;
       const duration = 1000;
       const startTime = Date.now();
+      const originalPos = camera.position.clone();
+      const targetPos = new THREE.Vector3(0.5, 1.2, 0.8);
+
       function animateZoom() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed/duration, 1);
         const easeProgress = easeInOutCubic(progress);
-        camera.position.lerpVectors(gameState.originalCameraPos, gameState.targetCameraPos, easeProgress);
-        if (progress < 1) requestAnimationFrame(animateZoom);
-        else {
+        camera.position.lerpVectors(originalPos, targetPos, easeProgress);
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateZoom);
+        } else {
           gameState.isZooming = false;
           controls.enabled = true;
-          showFirstScenario();
+          if (callback) callback();
         }
       }
       animateZoom();
@@ -569,184 +826,224 @@
       return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
     }
 
-    function handleMouseClick() {
-      if (!patientModel || gameState.hasFirstScenarioTriggered || gameState.isZooming) return;
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObject(patientModel, true);
-      if (intersects.length > 0) {
-        gameState.hasFirstScenarioTriggered = true;
-        hoverTooltip.style.display = 'none';
-        zoomToPatient();
+    // Show Specific Scenario
+    function showScenario(index) {
+      const scenario = scenarios[index];
+      choicePrompt.textContent = scenario.prompt;
+      choiceOptions.innerHTML = '';
+
+      // Update BP per scenario (e.g., scenario 7 drops to 78/54)
+      vitals.bpSystolic = Math.max(60, vitals.bpSystolic + scenario.bpChange.systolic);
+      vitals.bpDiastolic = Math.max(40, vitals.bpDiastolic + scenario.bpChange.diastolic);
+
+      // Create answer options
+      scenario.options.forEach((option) => {
+        const div = document.createElement('div');
+        div.className = 'choice-option';
+        div.textContent = option.text;
+        div.addEventListener('click', () => handleAnswer(index, option.correct, option.pulseChange));
+        choiceOptions.appendChild(div);
+      });
+
+      updateVitalUI();
+      choiceWindow.style.display = 'block';
+    }
+
+    // Handle Answer Submission (Fixed Pulse Bounds)
+    function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
+      const scenario = scenarios[scenarioIndex];
+      choiceWindow.style.display = 'none';
+
+      // Apply IV penalty (faster pulse drop for 2 questions)
+      if (gameState.ivPenaltyActive) {
+        pulseChange *= 1.5; // 50% faster pulse drop
+        gameState.penaltyQuestionCount++;
+        
+        // Reset penalty after 2 questions
+        if (gameState.penaltyQuestionCount >= 2) {
+          gameState.ivPenaltyActive = false;
+          gameState.penaltyQuestionCount = 0;
+        }
+      }
+
+      // Update Pulse with STRICT bounds (no <60 or >220)
+      if (isCorrect) {
+        // Correct answer: decrease pulse but not below minimum
+        vitals.pulse = Math.max(PULSE_MIN, vitals.pulse + pulseChange);
+        vitals.consecutiveWrongAnswers = 0;
+        feedbackTitle.textContent = "CORRECT";
+        feedbackTitle.style.color = "#00ff9d";
+        feedbackMessage.textContent = scenario.correctFeedback;
+        feedbackPanel.className = "feedback-panel feedback-correct";
+      } else {
+        // Wrong answer: increase pulse but not above maximum
+        vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseChange);
+        vitals.consecutiveWrongAnswers++;
+        
+        // Special handling for critical scenarios
+        if (scenario.critical && vitals.consecutiveWrongAnswers >= 2) {
+          endSimulation(false);
+          return;
+        }
+        
+        // Fatal error for final scenario
+        if (scenario.final) {
+          endSimulation(false);
+          return;
+        }
+
+        feedbackTitle.textContent = "INCORRECT";
+        feedbackTitle.style.color = "#ff4444";
+        feedbackMessage.textContent = scenario.incorrectFeedback;
+        feedbackPanel.className = "feedback-panel feedback-incorrect";
+
+        // Apply IV penalty if scenario 5 is wrong
+        if (scenario.penalty === "ivPenalty") {
+          gameState.ivPenaltyActive = true;
+          gameState.penaltyQuestionCount = 0;
+        }
+      }
+
+      // Update UI and show feedback
+      updateVitalUI();
+      feedbackPanel.style.display = 'block';
+
+      // Check for cardiac arrest (pulse at max/min bounds)
+      if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
+        endSimulation(false);
       }
     }
 
-    function checkPatientHover() {
-      if (!patientModel || gameState.hasFirstScenarioTriggered || gameState.isZooming) {
-        hoverTooltip.style.display = 'none';
-        return;
-      }
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObject(patientModel, true);
-      hoverTooltip.style.display = intersects.length > 0 ? 'block' : 'none';
-    }
-
-    function updatePulseUI() {
-      pulseValueUI.textContent = vitals.pulse;
-      condPulseUI.textContent = vitals.pulse;
-      const animationSpeed = 60 / vitals.pulse;
+    // Update Vital Signs UI + Pulse Color (Fixed Display)
+    function updateVitalUI() {
+      // Ensure pulse is an integer (no decimals) and within bounds
+      const displayPulse = Math.round(vitals.pulse);
+      
+      // Update values
+      pulseValueUI.textContent = displayPulse;
+      condPulseUI.textContent = displayPulse;
+      condBpUI.textContent = `${vitals.bpSystolic}/${vitals.bpDiastolic}`;
+      condRespUI.textContent = vitals.respirations;
+      
+      // Update pulse animation speed
+      const animationSpeed = 60 / displayPulse;
       pulseValueUI.style.animationDuration = `${animationSpeed}s`;
+
+      // Update pulse color (Green/Yellow/Red based on BPM ranges)
+      pulseValueUI.classList.remove('pulse-green', 'pulse-yellow', 'pulse-red');
+      if (displayPulse >= 100 && displayPulse <= 120) {
+        pulseValueUI.classList.add('pulse-green'); // Stable
+      } else if ((displayPulse > 120 && displayPulse <= 140) || (displayPulse < 100 && displayPulse >= 80)) {
+        pulseValueUI.classList.add('pulse-yellow'); // Instability
+      } else {
+        pulseValueUI.classList.add('pulse-red'); // Critical (<80 or >140)
+      }
+
+      vitals.lastPulseChange = Date.now();
     }
 
+    // Gradual Vital Deterioration (Fixed Pulse Bounds)
     function updateVitals() {
       const now = Date.now();
-      if (now - gameState.lastVitalUpdate > gameState.vitalDropInterval) {
-        if (!gameState.isPatientStable) {
-          vitals.pulse += 5;
-          vitals.bpSystolic -= 2;
-          vitals.bpDiastolic -= 1;
-          vitals.respirations += 2;
+      const interval = gameState.ivPenaltyActive ? gameState.vitalDropInterval / 2 : gameState.vitalDropInterval;
 
-          if (vitals.bpSystolic < 70) {
-            gameState.hasFirstScenarioTriggered = true;
-            triggerEmergencyScenario();
-          }
-          updatePulseUI();
-          console.log('Vitals worsened | Pulse:', vitals.pulse);
+      if (now - gameState.lastVitalUpdate > interval) {
+        // Pulse increases (deteriorates) but stays within bounds
+        const pulseDrop = gameState.ivPenaltyActive ? 5 : 3;
+        vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseDrop);
+        
+        // BP and respirations with bounds
+        vitals.bpSystolic = Math.max(60, vitals.bpSystolic - 2);
+        vitals.bpDiastolic = Math.max(40, vitals.bpDiastolic - 1);
+        vitals.respirations = Math.min(40, vitals.respirations + 1);
+
+        updateVitalUI();
+        console.log('Vitals worsened | Pulse:', vitals.pulse);
+
+        // Check for cardiac arrest (pulse at max/min)
+        if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
+          endSimulation(false);
         }
+
         gameState.lastVitalUpdate = now;
       }
     }
 
-    function showFirstScenario() {
-      choicePrompt.textContent = "Based on the patient's condition, what is the FIRST priority intervention?";
-      choiceOptions.innerHTML = '';
-      [
-        { text: "A. Start a full head-to-toe assessment", correct: false, pulseChange: +15 },
-        { text: "B. Call for imaging (CT abdomen)", correct: false, pulseChange: +20 },
-        { text: "C. Begin rapid IV fluid resuscitation", correct: true, pulseChange: -10 },
-        { text: "D. Ask the patient for their medical history", correct: false, pulseChange: +15 }
-      ].forEach((option) => {
-        const div = document.createElement('div');
-        div.className = 'choice-option';
-        div.textContent = option.text;
-        div.addEventListener('click', () => handleAnswer(option.correct, option.pulseChange));
-        choiceOptions.appendChild(div);
-      });
-      choiceWindow.style.display = 'block';
-    }
-
-    function handleAnswer(isCorrect, pulseChange) {
+    // End Simulation (Success/Failure)
+    function endSimulation(isSuccess) {
       choiceWindow.style.display = 'none';
-      
-      vitals.pulse += pulseChange;
-      vitals.pulse = Math.max(100, Math.min(vitals.pulse, 200));
-      updatePulseUI();
+      feedbackPanel.style.display = 'none';
 
-      if (isCorrect) {
-        gameState.isPatientStable = true;
-        vitals.bpSystolic += 5;
-        alert(`Correct! Pulse stabilized to ${vitals.pulse} BPM. Patient improves temporarily.`);
-        gameState.currentScenario = 2;
+      // Create end screen overlay matching PDF requirements
+      const endScreen = document.createElement('div');
+      endScreen.style.position = 'fixed';
+      endScreen.style.top = '0';
+      endScreen.style.left = '0';
+      endScreen.style.width = '100vw';
+      endScreen.style.height = '100vh';
+      endScreen.style.backgroundColor = isSuccess ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.95)';
+      endScreen.style.display = 'flex';
+      endScreen.style.flexDirection = 'column';
+      endScreen.style.justifyContent = 'center';
+      endScreen.style.alignItems = 'center';
+      endScreen.style.zIndex = '9999';
+      endScreen.style.color = 'white';
+      endScreen.style.fontFamily = 'Arial, sans-serif';
+      endScreen.style.textAlign = 'center';
+      endScreen.style.padding = '2rem';
+      endScreen.style.animation = isSuccess ? 'none' : 'fadeToBlack 2s forwards';
+
+      // Success/Failure Styling
+      if (isSuccess) {
+        // Success: Scene freezes, alarms soften
+        endScreen.style.background = 'rgba(0, 0, 0, 0.7)';
       } else {
-        gameState.isPatientStable = false;
-        vitals.bpSystolic -= 10;
-        alert(`Incorrect! Pulse increased to ${vitals.pulse} BPM. Patient decompensating!`);
+        // Failure: Fade to black, flatline tone implied
+        endScreen.style.background = 'black';
       }
+
+      const endTitle = document.createElement('h2');
+      endTitle.style.fontSize = '2.5rem';
+      endTitle.style.marginBottom = '1.5rem';
+      endTitle.style.color = isSuccess ? '#00ff9d' : '#ff4444';
+      endTitle.textContent = isSuccess ? 'SUCCESS' : 'FAILURE';
+
+      const endMessage = document.createElement('p');
+      endMessage.style.fontSize = '1.2rem';
+      endMessage.style.maxWidth = '600px';
+      endMessage.style.lineHeight = '1.6';
+      endMessage.textContent = isSuccess 
+        ? "Correct prioritization under pressure prevented cardiac arrest."
+        : "Delayed or incorrect decisions resulted in patient death.";
+
+      const restartButton = document.createElement('button');
+      restartButton.style.marginTop = '2rem';
+      restartButton.style.padding = '1rem 3rem';
+      restartButton.style.fontSize = '1.2rem';
+      restartButton.style.fontWeight = 'bold';
+      restartButton.style.color = 'white';
+      restartButton.style.backgroundColor = '#ff4444';
+      restartButton.style.border = 'none';
+      restartButton.style.borderRadius = '5px';
+      restartButton.style.cursor = 'pointer';
+      restartButton.textContent = 'Play Again';
+      restartButton.addEventListener('click', () => location.reload());
+
+      endScreen.appendChild(endTitle);
+      endScreen.appendChild(endMessage);
+      endScreen.appendChild(restartButton);
+      document.body.appendChild(endScreen);
     }
 
-    function triggerEmergencyScenario() {
-      if (camera.position.distanceTo(gameState.targetCameraPos) > 0.1) {
-        gameState.isZooming = true;
-        controls.enabled = false;
-        const duration = 800;
-        const startTime = Date.now();
-        function emergencyZoom() {
-          const elapsed = Date.now() - startTime;
-          const progress = Math.min(elapsed/duration, 1);
-          camera.position.lerpVectors(camera.position, gameState.targetCameraPos, progress);
-          if (progress < 1) requestAnimationFrame(emergencyZoom);
-          else {
-            gameState.isZooming = false;
-            controls.enabled = true;
-            showEmergencyWindow();
-          }
-        }
-        emergencyZoom();
-      } else showEmergencyWindow();
-    }
-
-    function showEmergencyWindow() {
-      patientCondition.style.display = 'none';
-      choicePrompt.textContent = "UNSTABLE VITALS – ACT NOW!";
-      choiceOptions.innerHTML = '';
-      [
-        { text: "A. Comfort the patient", correct: false, pulseChange: +25 },
-        { text: "B. Document findings", correct: false, pulseChange: +30 },
-        { text: "C. Notify trauma team—suspected internal hemorrhage", correct: true, pulseChange: -15 },
-        { text: "D. Reassess temperature", correct: false, pulseChange: +25 }
-      ].forEach((option) => {
-        const div = document.createElement('div');
-        div.className = 'choice-option';
-        div.textContent = option.text;
-        div.addEventListener('click', () => {
-          choiceWindow.style.display = 'none';
-          patientCondition.style.display = 'block';
-          vitals.pulse += option.pulseChange;
-          vitals.pulse = Math.max(100, Math.min(vitals.pulse, 200));
-          updatePulseUI();
-          if (option.correct) {
-            gameState.isPatientStable = true;
-            vitals.bpSystolic += 15;
-            alert(`Success! Pulse drops to ${vitals.pulse} BPM. Trauma team en route.`);
-            gameState.currentScenario = 3;
-          } else {
-            alert(`FATAL ERROR: Pulse hits ${vitals.pulse} BPM. Cardiac arrest! Simulation ends.`);
-            location.reload();
-          }
-        });
-        choiceOptions.appendChild(div);
-      });
-      choiceWindow.style.display = 'block';
-    }
-
-    function checkObjectInteraction() {
-      if (!patientModel || gameState.currentScenario !== 2 || gameState.isZooming) return;
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObject(patientModel, true);
-      if (intersects.length > 0) {
-        gameState.currentScenario = 2.5;
-        patientCondition.style.display = 'none';
-        setTimeout(() => {
-          choicePrompt.textContent = "What is most likely happening internally?";
-          choiceOptions.innerHTML = '';
-          [
-            { text: "A. Pneumothorax", correct: false, pulseChange: +15 },
-            { text: "B. Internal hemorrhage", correct: true, pulseChange: -10 },
-            { text: "C. Cardiac tamponade", correct: false, pulseChange: +15 },
-            { text: "D. Anxiety-induced hyperventilation", correct: false, pulseChange: +10 }
-          ].forEach((option) => {
-            const div = document.createElement('div');
-            div.className = 'choice-option';
-            div.textContent = option.text;
-            div.addEventListener('click', () => {
-              choiceWindow.style.display = 'none';
-              patientCondition.style.display = 'block';
-              vitals.pulse += option.pulseChange;
-              vitals.pulse = Math.max(100, Math.min(vitals.pulse, 200));
-              updatePulseUI();
-              if (option.correct) {
-                alert(`Correct! Pulse stabilizes to ${vitals.pulse} BPM. Prepare for transfusion.`);
-                gameState.currentScenario = 4;
-              } else {
-                alert(`Incorrect! Pulse rises to ${vitals.pulse} BPM. Condition worsens.`);
-              }
-            });
-            choiceOptions.appendChild(div);
-          });
-          choiceWindow.style.display = 'block';
-        }, 1000);
+    // Fade to black animation for failure
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeToBlack {
+        from { background: rgba(0, 0, 0, 0.5); }
+        to { background: #000; }
       }
-    }
+    `;
+    document.head.appendChild(style);
 
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -760,7 +1057,6 @@
       emergencyLights.intensity = 0.3 + Math.sin(Date.now()*0.001)*0.1;
       updateVitals();
       checkPatientHover();
-      checkObjectInteraction();
       renderer.render(scene, camera);
     }
   </script>
