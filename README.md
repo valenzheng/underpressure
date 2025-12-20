@@ -7,7 +7,7 @@ Step into the fast paced world of emergency medicine with Under Pressure, a 3D E
 
 You’ll face a critical trauma case: Jordan R., a 28 year old involved in a motorcycle crash, battling hypovolemic shock and potential internal bleeding. Your role is to make rapid, evidence based decisions to stabilize vital signs, recognize shock, and prioritize life saving interventions. The clock is ticking. Wrong choices accumulate, accelerating heart rate decline, intensifying audio and visual stress, and ultimately leading to cardiac arrest if critical thresholds are crossed.
 
-Key Features:
+**Key Features:**
 
 - Immersive 3D ER environment with dynamic chaos
 - Realistic patient vitals (heart rate and blood pressure that respond to your actions
@@ -42,20 +42,53 @@ No additional software or dependencies are required, just a modern web browser (
    - Red = critical state (one more wrong decision may cause cardiac arrest)
 6. Aim to stabilize the patient’s vitals by making consistent, evidence based choices to reach the success end state.
 
-# Future Improvements
-The team acknowledges that there are improvements to be made in the game, as we expand this game to all nursing students. This project is still in development, and we have several key enhancements planned:
+# Challenges and Future Improvements
 
-- Additional Visual & Animation Elements: We originally intended to include dynamic visuals like nurses/doctors rushing through the ER bay and patient pain animations (e.g., grimacing, labored breathing) to boost immersion. These features proved technically challenging and are not yet implemented, but we plan to refine them in future updates.
+The team acknowledges that there are improvements to be made in the game, as we expand this game to all nursing students. This project is not finished, and key challenges and enhancements are outlined below:
+
+### Key Challenges
+- Given technical challenges with the company’s Unity SDK, we shifted focus to another area of immersive simulation that is being leveraged in the space for VR-based nursing simulation.
+- Implementing dynamic visuals (nurses/doctors rushing through the ER bay) and patient pain animations (grimacing, labored breathing) proved technically challenging and are not yet included in the current version.
+
+### Future Improvements
+- Additional Visual & Animation Elements: Refine and implement the planned dynamic ER staff visuals and patient pain animations to enhance immersion.
 - More Patient Cases: Expand beyond the motorcycle crash scenario to include diverse trauma cases (e.g., falls, gunshot wounds) and non trauma emergencies (e.g., sepsis, cardiac events) to broaden training relevance.
-- Enhanced Educational Feedback: Add post decision explanations to reinforce clinical reasoning (e.g., “Lactated Ringer’s is preferred for trauma because it mimics plasma electrolyte composition”).
+- Enhanced Educational Feedback: Add post decision explanations to reinforce clinical reasoning (e.g., "Lactated Ringer’s is preferred for trauma because it mimics plasma electrolyte composition").
 - Nursing Cave Optimization: Further refine the simulation to align with the Nursing Cave 3D track’s projection and interaction requirements for seamless use in training facilities.
 - Difficulty Customization: Introduce adjustable pressure levels (e.g., slower/faster vitals decline) to accommodate beginner and advanced nursing learners.
+
+# Assets Credits
+
+## 3D Assets
+
+- **Patient 3D Model**  
+  Created by edouard77 (Sketchfab)  
+  https://sketchfab.com/3d-models/patient-00b483f284a542899b94e99831f1ad1c
+
+- **Hospital Room 3D Model**  
+  Created by Chenchanchong (Sketchfab)  
+  https://sketchfab.com/3d-models/hospital-ward-d8a55871b8fb4d708d3687b3a39f6688
+
+## Audio Assets
+
+- **Heartbeat Sound**  
+  Created by DRAGON-STUDIO (Pixabay)  
+  https://pixabay.com/sound-effects/heartbeat-sound-372448/
+
+- **The Terror of Flatlining**  
+  Created by freesound_community (Pixabay)  
+  https://pixabay.com/sound-effects/the-terror-of-flatlining-34031/
+
+- **Hospital Busy X-Ray Room Tone**  
+  Created by freesound_community (Pixabay)  
+  https://pixabay.com/sound-effects/hospital-busy-x-ray-room-tone-56441/
 
 # Authors and Acknowledgment
 
 ### Creators
 
 Valentina Zheng
+
 Jhennifer Campos
 
 ### Special Thanks
@@ -67,5 +100,3 @@ The CS 460 - Computer Graphics course and Professor Daniel Haehn for teaching co
 We applied skills learned in CS 460, including web based 3D rendering, user interaction design, and dynamic feedback systems to create an educational tool that bridges graphics technology and nursing training.
 
 Course Website: CS460.org
-
-
