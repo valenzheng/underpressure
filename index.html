@@ -485,7 +485,7 @@
       src="heartbeat/fastbeep.mp3"
       loop
       preload="auto"
-    ><|card|>:
+    ></audio>
 
     <audio
       id="worseningBeep"
@@ -748,7 +748,7 @@
                       gameContent.style.display = "block";
 
                       // Play heavy breathing sound when game starts
-                      audioElements.heavyBreathing.volume = 0.6;
+                      audioElements.heavyBreathing.volume = 0.8;
                       audioElements.heavyBreathing.play().catch((err) => {
                         console.log("Heavy breathing play failed:", err);
                       });
@@ -1868,7 +1868,6 @@
           vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseChange);
           vitals.consecutiveWrongAnswers++;
 
-          
           if (scenario.critical && vitals.consecutiveWrongAnswers >= 2) {
             endSimulation(false);
             return;
