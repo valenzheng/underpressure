@@ -7,16 +7,16 @@ Step into the fast paced world of emergency medicine with Under Pressure, a 3D E
 
 You’ll face a critical trauma case: Jordan R., a 28 year old involved in a motorcycle crash, battling hypovolemic shock and potential internal bleeding. Your role is to make rapid, evidence based decisions to stabilize vital signs, recognize shock, and prioritize life saving interventions. The clock is ticking. Wrong choices accumulate, accelerating heart rate decline, intensifying audio and visual stress, and ultimately leading to cardiac arrest if critical thresholds are crossed.
 
-**Key Features:**
+**Main Features:**
 
 - Immersive 3D ER environment with dynamic chaos
-- Realistic patient vitals (heart rate and blood pressure that respond to your actions
+- Realistic patient vitals (heart rate and blood pressure that respond to your actions)
 - 10 critical decision points covering assessment, intervention and clinical judgment
 - No instant failure mirrors real ER logic: one mistake may be survivable, but delayed/repeated poor decisions are fatal
 - Visual/audio feedback (flashing vitals, escalating alarms, dimming lights) to amplify pressure
 - Interactive decision windows that appear when interacting with the patient
 
-# Installation
+## Installation
 
 To play Under Pressure or access the game files, follow these simple steps:
 
@@ -31,7 +31,8 @@ If the online link isn’t working, download the game files and run it from your
 4. Open the extracted folder and double click the index.html file to launch the game in your default web browser.
 No additional software or dependencies are required, just a modern web browser (Chrome, Firefox, Edge, or Safari recommended).
    
-# Usage
+## Usage
+
 ### How to Play
 1. Launch the simulation via the online link or index.html file and you’ll spawn in the chaotic ER bay with Jordan R. on a gurney in front of you.
 2. Observe the environment and patient presentation (pale skin, rapid breathing, rigid abdomen) to inform your decisions.
@@ -42,11 +43,15 @@ No additional software or dependencies are required, just a modern web browser (
    - Red = critical state (one more wrong decision may cause cardiac arrest)
 6. Aim to stabilize the patient’s vitals by making consistent, evidence based choices to reach the success end state.
 
-# Challenges and Future Improvements
+## Project Status
 
-The team acknowledges that there are improvements to be made in the game, as we expand this game to all nursing students. This project is not finished, and key challenges and enhancements are outlined below:
+The original version of Under Pressure was developed as a two person collaboration for CS 460 – Graphics. This repository is actively maintained by Valentina Zheng, with ongoing feature development, simulation improvements, and educational content expansion continuing beyond the initial course project.
 
-### Key Challenges
+## Challenges and Future Improvements
+
+The team acknowledges that there are improvements to be made in the game, as we expand this game to all nursing students. This project is not finished, and main challenges and enhancements are outlined below:
+
+### Challenges
 - Given technical challenges with the company’s Unity SDK, we shifted focus to another area of immersive simulation that is being leveraged in the space for VR-based nursing simulation.
 - Implementing dynamic visuals (nurses/doctors rushing through the ER bay) and patient pain animations (grimacing, labored breathing) proved technically challenging and are not yet included in the current version.
 
@@ -57,9 +62,9 @@ The team acknowledges that there are improvements to be made in the game, as we 
 - Nursing Cave Optimization: Further refine the simulation to align with the Nursing Cave 3D track’s projection and interaction requirements for seamless use in training facilities.
 - Difficulty Customization: Introduce adjustable pressure levels (e.g., slower/faster vitals decline) to accommodate beginner and advanced nursing learners.
 
-# Assets Credits
+## Assets Credits
 
-## 3D Assets
+### 3D Assets
 
 - **Patient 3D Model**  
   Created by edouard77 (Sketchfab)  
@@ -69,7 +74,7 @@ The team acknowledges that there are improvements to be made in the game, as we 
   Created by Chenchanchong (Sketchfab)  
   https://sketchfab.com/3d-models/hospital-ward-d8a55871b8fb4d708d3687b3a39f6688
 
-## Audio Assets
+### Audio Assets
 
 - **Heartbeat Sound**  
   Created by DRAGON-STUDIO (Pixabay)  
@@ -83,13 +88,17 @@ The team acknowledges that there are improvements to be made in the game, as we 
   Created by freesound_community (Pixabay)  
   https://pixabay.com/sound-effects/hospital-busy-x-ray-room-tone-56441/
 
-# Authors and Acknowledgment
+## Authors and Acknowledgment
 
 ### Creators
+**Valentina Zheng**
+- Led development of the core simulation engine and all HTML/CSS frontend UI (title screen, loading ECG animation, in game monitor panels, choice/feedback popup system)
+- Implemented clinical logic, including patient vital sign simulation, the 10 scenario medical decision tree, wrong answer decay rules, IV penalties, and critical failure mechanics
+- Built the Three.js desktop environment, GLTF model loading pipeline, mouse raycast patient interaction, and dynamic audio system
+- Managed GitHub Pages deployment, project documentation, roadmap planning, and ongoing development
 
-Valentina Zheng
-
-Jhennifer Campos
+**Jhennifer Campos**
+- Developed standalone WebXR/VR functionality. Three.js VR button, dual XR controller setup plus laser pointer rendering, floating in world VR menu and VR vital HUD, headset recenter logic for immersive VR gameplay.
 
 ### Special Thanks
 
