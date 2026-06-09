@@ -254,7 +254,7 @@
 
       .pulse-red {
         color: #ff4444;
-      } /* Critical: <80 BPM and dropping */
+      }
 
       .pulse-label {
         font-size: 0.75rem;
@@ -313,7 +313,51 @@
         background-color: #ff2222;
       }
 
+      /* Vitals trend graph */
+      #vitalsTrendCanvas {
+        position: absolute;
+        top: 210px;
+        right: 20px;
+        background: rgba(0,0,0,0.82);
+        border: 2px solid #00ff9d;
+        border-radius: 10px;
+        z-index: 900;
+        width: 135px;
+        height: 70px;
+      }
+
+      /* Countdown timer */
+      #questionTimer {
+        position: absolute;
+        top: 290px;
+        right: 20px;
+        background: rgba(0,0,0,0.85);
+        border: 2px solid #ff4444;
+        border-radius: 8px;
+        padding: 0.3rem 0.5rem;
+        font-family: "Courier New", monospace;
+        color: white;
+        font-size: 0.95rem;
+        font-weight: bold;
+        z-index: 900;
+        display: none;
+        width: 135px;
+        text-align: center;
+        box-sizing: border-box;
+      }
+      #questionTimer.timer-warn { color: #ff4444; border-color: #ff0000; animation: pulse-flash 0.4s infinite; }
+
+      /* Blood particle canvas */
+      #particleCanvas {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        pointer-events: none;
+        z-index: 850;
+      }
+
       @keyframes pulse-flash {
+
         0% {
           opacity: 0.4;
           transform: scale(0.95);
@@ -369,12 +413,12 @@
   </head>
 
   <body>
-    <!-- Cover Screen (Visible on Load) -->
+    <!-- Cover Screen -->
     <div class="cover-screen" id="cover-screen">
       <button class="play-button" id="play-button">Play</button>
     </div>
 
-    <!-- Loading Screen (Hospital Monitor Style) -->
+    <!-- Loading Screen -->
     <div class="loading-screen" id="loading-screen">
       <div class="status-container">
         <div class="ecg-container" id="ecg-container"></div>
@@ -425,10 +469,23 @@
     <!-- Game Content-->
     <div id="game-content">
 
+      <!-- Vitals Trend Graph -->
+      <canvas id="vitalsTrendCanvas" width="135" height="70"></canvas>
+
+      <!-- Question Countdown Timer -->
+      <div id="questionTimer">⏱ 30</div>
+
+      <!-- Particle Canvas (blood/IV drip) -->
+      <canvas id="particleCanvas"></canvas>
+
       <!-- Pulse Monitor UI -->
       <div class="pulse-monitor">
         <div class="pulse-label">Patient's Pulse (BPM)</div>
         <div class="pulse-value pulse-yellow" id="pulseValue">130</div>
+        <div class="pulse-label" style="margin-top:4px;">BP (mmHg)</div>
+        <div id="monitorBp" style="font-size:1.1rem;font-weight:bold;color:#ffaa44;margin:4px 0;letter-spacing:1px;">88/60</div>
+        <div class="pulse-label" style="margin-top:2px;">RESP /min</div>
+        <div id="monitorResp" style="font-size:1rem;font-weight:bold;color:#aaddff;margin:4px 0;">28</div>
       </div>
 
       <!-- Choice Window -->
@@ -457,6 +514,7 @@
       <div class="feedback-panel" id="feedbackPanel">
         <h4 id="feedbackTitle"></h4>
         <p id="feedbackMessage"></p>
+        <p id="feedbackRationale" style="font-size:0.85rem;color:#aad4ff;background:rgba(0,100,200,0.15);border-left:3px solid #4488ff;padding:0.6rem 0.8rem;border-radius:4px;margin-bottom:1.2rem;line-height:1.5;text-align:left;"></p>
         <button class="next-button" id="nextButton">Continue</button>
       </div>
 
@@ -501,7 +559,6 @@
       preload="auto"
     > </audio>
 
-    <!-- New Audio Elements Added -->
     <audio
       id="loadingHeartbeat"
       src="heartbeat/heartbeep.mp3"
@@ -524,6 +581,10 @@
         }
       }
     </script>
+    <!-- Score tracking -->
+    <script>
+      window._gameScore = { correct: 0, wrong: 0, missed: [], startTime: Date.now(), endTime: null };
+    </script>
 
     <script type="module">
       import * as THREE from "three";
@@ -531,6 +592,10 @@
       import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
       import { VRButton } from "three/addons/webxr/VRButton.js";
       import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
+      import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+      import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+      import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+      import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 
       // ---------------------------
       // AUDIO
@@ -780,6 +845,7 @@
 
       // Game Variables
       let scene, camera, renderer, controls, raycaster, mouse;
+      let composer, bloomPass, vignettePass;
 
       // VR controller stuff
       const tempMatrix = new THREE.Matrix4();
@@ -811,6 +877,7 @@
       const PULSE_MAX = 220;
 
       let gameState = {
+        simEnded: false,
         currentScenario: 1,
         isPatientStable: false,
         lastVitalUpdate: Date.now(),
@@ -856,6 +923,7 @@
             "Correct! Signs of hypovolemic shock require immediate fluid resuscitation to maintain circulation.",
           incorrectFeedback:
             "Incorrect. Shock requires immediate fluid resuscitation, not delayed assessment or imaging. Pulse will drop faster.",
+          rationale: "In hypovolemic shock, circulating volume must be restored immediately. Assessment and imaging are secondary until hemodynamic stability is achieved.",
           bpChange: { systolic: 0, diastolic: 0 },
         },
         {
@@ -870,6 +938,7 @@
             "Correct! Abdominal rigidity, trauma mechanism and shock vitals strongly indicate internal bleeding.",
           incorrectFeedback:
             "Incorrect. Abdominal trauma with rigid abdomen suggests internal hemorrhage. Heart rate will drop faster over time.",
+          rationale: "Blunt abdominal trauma with a rigid abdomen, tachycardia, and hypotension is internal hemorrhage until proven otherwise. Pneumothorax would present with breath sounds changes, not abdominal rigidity.",
           bpChange: { systolic: -2, diastolic: -1 },
         },
         {
@@ -884,6 +953,7 @@
             "Correct! Blood loss causes low blood pressure, rapid pulse and poor tissue perfusion.",
           incorrectFeedback:
             "Incorrect. This is hypovolemic shock from blood loss. BP will decrease more rapidly.",
+          rationale: "Hypovolemic shock hallmarks: tachycardia, hypotension, pale/clammy skin, trauma mechanism. Septic shock would show fever/warmth; cardiogenic would show pulmonary edema; neurogenic shows bradycardia.",
           bpChange: { systolic: -3, diastolic: -2 },
         },
         {
@@ -898,6 +968,7 @@
             "Correct! Life-threatening problems must be addressed before secondary assessments.",
           incorrectFeedback:
             "Incorrect. Primary survey (ABCs) takes priority in unstable patients. Heart rate will decline gradually.",
+          rationale: "ABCDE (Airway, Breathing, Circulation, Disability, Exposure) — the primary survey — identifies life threats first. Head-to-toe and pain assessments come only after life-threatening issues are controlled.",
           bpChange: { systolic: -2, diastolic: -1 },
         },
         {
@@ -912,6 +983,7 @@
             "Correct! Large-bore IV access allows rapid delivery of fluids and blood.",
           incorrectFeedback:
             "Incorrect. IV too small, fluids infusing too slowly... Pulse will drop faster for the next two questions.",
+          rationale: "An 18-gauge or larger in the antecubital fossa maximizes flow rate. A 24-gauge delivers ~1 mL/min; an 18-gauge delivers ~90 mL/min. In hemorrhagic shock, every second of adequate volume delivery matters.",
           bpChange: { systolic: -2, diastolic: -1 },
           penalty: "ivPenalty",
         },
@@ -927,7 +999,8 @@
             "Correct! Lactated Ringer’s is commonly used to restore volume in trauma patients.",
           incorrectFeedback:
             "Incorrect. Minimal improvement in vitals, heart rate remains unstable.",
-          bpChange: { systolic: +1, diastolic: +1 }, // Minimal improvement if wrong
+          rationale: "Lactated Ringer's closely mimics plasma electrolyte composition. D5W is hypotonic and worsens edema; normal saline in large volumes causes hyperchloremic acidosis; oral fluids are contraindicated in surgical emergencies.",
+          bpChange: { systolic: +1, diastolic: +1 },
         },
         {
           prompt: "What should a nurse do next?",
@@ -941,6 +1014,7 @@
             "Correct! Persistent hypotension after fluids indicates ongoing blood loss.",
           incorrectFeedback:
             "Incorrect. One more wrong answer will cause cardiac arrest.",
+          rationale: "Fluid-refractory hypotension (BP not improving after 1-2L crystalloid) triggers blood product resuscitation. Waiting or scanning an unstable patient wastes critical time before the patient decompensates.",
           bpChange: { systolic: -10, diastolic: -6 },
           critical: true,
         },
@@ -956,6 +1030,7 @@
             "Correct! Blood is required when fluids alone cannot stabilize circulation.",
           incorrectFeedback:
             "Incorrect. Sudden heart rate drop, patient is in near-failure state.",
+          rationale: "Damage control resuscitation uses a 1:1:1 ratio of packed RBCs, fresh frozen plasma, and platelets. Waiting for labs or imaging in an actively hemorrhaging patient delays life-saving intervention.",
           bpChange: { systolic: -5, diastolic: -3 },
         },
         {
@@ -970,6 +1045,7 @@
             "Correct! Unstable patients must be stabilized before imaging.",
           incorrectFeedback:
             "Incorrect. Heart rhythm becomes irregular, one final chance remains.",
+          rationale: "CT is diagnostic, not treatment. A hemodynamically unstable patient who arrests in the scanner cannot be resuscitated effectively. Stabilize first — OR or interventional radiology may be needed immediately.",
           bpChange: { systolic: -5, diastolic: -3 },
         },
         {
@@ -983,10 +1059,189 @@
           correctFeedback:
             "Correct! Rapid escalation ensures immediate surgical intervention.",
           incorrectFeedback: "Incorrect. Fatal delay, cardiac arrest occurs.",
+          rationale: "Trauma team activation triggers a coordinated surgical response. Internal hemorrhage often requires emergent operative management — no nursing intervention replaces surgical hemorrhage control.",
           bpChange: { systolic: -10, diastolic: -5 },
           final: true,
         },
       ];
+
+      // ════════════════════════════════
+      // VITALS TREND GRAPH 
+      // ════════════════════════════════ 
+      const trendCanvas = document.getElementById("vitalsTrendCanvas");
+      const trendCtx = trendCanvas.getContext("2d");
+      const TREND_MAX = 60;      // data points to keep
+      const trendHistory = [];   // {pulse, bp} entries
+
+      function pushTrend() {
+        trendHistory.push({ pulse: vitals.pulse, bp: vitals.bpSystolic });
+        if (trendHistory.length > TREND_MAX) trendHistory.shift();
+      }
+
+      function drawTrend() {
+        const w = trendCanvas.width, h = trendCanvas.height;
+        trendCtx.clearRect(0, 0, w, h);
+
+        // Background grid lines
+        trendCtx.strokeStyle = "rgba(255,255,255,0.06)";
+        trendCtx.lineWidth = 1;
+        for (let y = 0; y < h; y += 18) {
+          trendCtx.beginPath(); trendCtx.moveTo(0,y); trendCtx.lineTo(w,y); trendCtx.stroke();
+        }
+
+        if (trendHistory.length < 2) return;
+
+        const pMin = 50, pMax = 220;
+
+        function drawLine(key, color, lineW) {
+          trendCtx.strokeStyle = color;
+          trendCtx.lineWidth = lineW;
+          trendCtx.lineJoin = "round";
+          trendCtx.beginPath();
+          trendHistory.forEach((d, i) => {
+            const x = (i / (TREND_MAX - 1)) * w;
+            const val = Math.max(pMin, Math.min(pMax, d[key]));
+            const y = h - ((val - pMin) / (pMax - pMin)) * h;
+            i === 0 ? trendCtx.moveTo(x, y) : trendCtx.lineTo(x, y);
+          });
+          trendCtx.stroke();
+        }
+
+        // Pulse line — green/yellow/red
+        const p = vitals.pulse;
+        const lineColor = p > 140 || p < 80 ? "#ff4444" : p > 120 || p < 100 ? "#ffff00" : "#00ff9d";
+        drawLine("pulse", lineColor, 2);
+
+        // BP systolic — faint blue overlay
+        drawLine("bp", "rgba(100,180,255,0.5)", 1.5);
+
+        // Labels
+        trendCtx.fillStyle = "rgba(255,255,255,0.55)";
+        trendCtx.font = "9px Courier New";
+        trendCtx.fillText("HR/BP", 4, 10);
+        trendCtx.fillText(Math.round(vitals.pulse) + " bpm", w - 50, 10);
+      }
+
+      // ══════════════════════════════════════════════════
+      // QUESTION COUNTDOWN TIMER
+      // ══════════════════════════════════════════════════
+      const timerEl = document.getElementById("questionTimer");
+      let timerInterval = null;
+      let timerSeconds = 0;
+      const TIMER_DURATION = 30;
+
+      function startQuestionTimer() {
+        clearInterval(timerInterval);
+        timerSeconds = TIMER_DURATION;
+        timerEl.style.display = "block";
+        timerEl.classList.remove("timer-warn");
+        timerEl.textContent = "⏱ " + timerSeconds;
+
+        timerInterval = setInterval(() => {
+          if (gameState.simEnded) { clearInterval(timerInterval); timerEl.style.display = "none"; return; }
+          timerSeconds--;
+          timerEl.textContent = "⏱ " + timerSeconds;
+          if (timerSeconds <= 10) timerEl.classList.add("timer-warn");
+          if (timerSeconds <= 0) {
+            clearInterval(timerInterval);
+            timerEl.style.display = "none";
+            // Auto-select wrong answer (first incorrect option) as time penalty
+            const idx = gameState.currentScenario - 1;
+            const scenario = scenarios[idx];
+            const wrongOpt = scenario.options.find(o => !o.correct);
+            if (wrongOpt) handleAnswer(idx, false, wrongOpt.pulseChange);
+          }
+        }, 1000);
+      }
+
+      function stopQuestionTimer() {
+        clearInterval(timerInterval);
+        timerEl.style.display = "none";
+        timerEl.classList.remove("timer-warn");
+      }
+
+      // ═══════════════════════════════════════════════════
+      // PARTICLE SYSTEM (blood/IV drip)
+      // ═══════════════════════════════════════════════════
+      const pCanvas = document.getElementById("particleCanvas");
+      const pCtx = pCanvas.getContext("2d");
+      let particles = [];
+
+      function resizeParticleCanvas() {
+        pCanvas.width  = window.innerWidth;
+        pCanvas.height = window.innerHeight;
+      }
+      resizeParticleCanvas();
+      window.addEventListener("resize", resizeParticleCanvas);
+
+      function spawnParticles(type) {
+        // Project patient 3D position to screen
+        let sx = window.innerWidth * 0.62, sy = window.innerHeight * 0.55;
+        if (scene && camera && patientModel) {
+          const pos3 = new THREE.Vector3();
+          patientModel.getWorldPosition(pos3);
+          pos3.project(camera);
+          sx = (pos3.x * 0.5 + 0.5) * window.innerWidth;
+          sy = (-pos3.y * 0.5 + 0.5) * window.innerHeight;
+        }
+
+        const count = type === "blood" ? 28 : 14;
+        for (let i = 0; i < count; i++) {
+          const angle = (Math.random() * Math.PI * 2);
+          const speed = type === "blood"
+            ? Math.random() * 4.5 + 1.5
+            : Math.random() * 1.8 + 0.4;
+          particles.push({
+            x: sx + (Math.random() - 0.5) * 30,
+            y: sy + (Math.random() - 0.5) * 20,
+            vx: Math.cos(angle) * speed * (type === "blood" ? 1 : 0.3),
+            vy: type === "blood"
+              ? Math.sin(angle) * speed - 1
+              : Math.abs(Math.sin(angle)) * speed + 1.5,  // drip falls down
+            alpha: 1,
+            radius: type === "blood" ? Math.random() * 5 + 2 : Math.random() * 3 + 1,
+            color: type === "blood" ? "#cc0000" : "#4488ff",
+            decay: type === "blood" ? 0.025 : 0.018,
+            gravity: type === "blood" ? 0.18 : 0.08,
+            type,
+          });
+        }
+      }
+
+      function updateParticles() {
+        if (particles.length === 0) return;
+        pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+        particles = particles.filter(p => p.alpha > 0.02);
+        particles.forEach(p => {
+          p.vy += p.gravity;
+          p.x += p.vx; p.y += p.vy;
+          p.alpha -= p.decay;
+          pCtx.beginPath();
+          pCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          pCtx.fillStyle = p.color;
+          pCtx.globalAlpha = Math.max(0, p.alpha);
+          pCtx.fill();
+        });
+        pCtx.globalAlpha = 1;
+      }
+
+      // ══════════════════════════════════════════════════
+      // WRONG ANSWER SOUND CUE
+      // ══════════════════════════════════════════════════
+      function playWrongBuzz() {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(180, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.35);
+          gain.gain.setValueAtTime(0.06, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+          osc.start(); osc.stop(ctx.currentTime + 0.4);
+        } catch(e) {}
+      }
 
       // Initialize Game
       function initGame() {
@@ -1058,6 +1313,8 @@
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         renderer.xr.enabled = true;
         renderer.xr.setReferenceSpaceType("local-floor");
@@ -1074,6 +1331,44 @@
         vrBtn.style.bottom = "20px";
         vrBtn.style.zIndex = "100000";
         document.body.appendChild(vrBtn);
+
+        // POST PROCESSING SETUP 
+        const vignetteShader = {
+          uniforms: {
+            tDiffuse: { value: null },
+            vignetteStrength: { value: 0.0 },
+            vignetteColor: { value: new THREE.Color(0.6, 0.0, 0.0) },
+          },
+          vertexShader: `
+            varying vec2 vUv;
+            void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+          `,
+          fragmentShader: `
+            uniform sampler2D tDiffuse;
+            uniform float vignetteStrength;
+            uniform vec3 vignetteColor;
+            varying vec2 vUv;
+            void main() {
+              vec4 texel = texture2D(tDiffuse, vUv);
+              vec2 uv = vUv * (1.0 - vUv.yx);
+              float vignette = uv.x * uv.y * 15.0;
+              vignette = clamp(pow(vignette, 0.25), 0.0, 1.0);
+              float darkness = (1.0 - vignette) * vignetteStrength;
+              gl_FragColor = vec4(mix(texel.rgb, vignetteColor * texel.rgb * 0.3, darkness), texel.a);
+            }
+          `,
+        };
+        composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        bloomPass = new UnrealBloomPass(
+          new THREE.Vector2(window.innerWidth, window.innerHeight),
+          0.2, 0.4, 0.85
+        );
+        composer.addPass(bloomPass);
+        vignettePass = new ShaderPass(vignetteShader);
+        vignettePass.renderToScreen = true;
+        composer.addPass(vignettePass);
+        // END 
 
         renderer.xr.addEventListener("sessionstart", () => {
           pendingRecenter = true;
@@ -1144,13 +1439,33 @@
           handleMouseClick();
         });
 
-        // Lighting
-        ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-        directionalLight = new THREE.DirectionalLight(0xffffdd, 1.5);
+        // Lighting setup
+        ambientLight = new THREE.AmbientLight(0xf0f8ff, 2.2);  // cool white, strong fill
+        directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
         directionalLight.position.set(5, 8, 3);
-        emergencyLights = new THREE.PointLight(0xff4444, 0.3, 10);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 30;
+
+        // Overhead ceiling fill 
+        const ceilingLight1 = new THREE.PointLight(0xe8f4ff, 3.0, 12);
+        ceilingLight1.position.set(0, 5, 1);
+        const ceilingLight2 = new THREE.PointLight(0xe8f4ff, 2.5, 12);
+        ceilingLight2.position.set(3, 5, 3);
+        scene.add(ceilingLight1, ceilingLight2);
+
+        emergencyLights = new THREE.PointLight(0xff2222, 0.0, 8);  // starts off
         emergencyLights.position.set(2, 3, 2);
         scene.add(ambientLight, directionalLight, emergencyLights);
+
+        // Store ceiling lights for flicker access
+        gameState.ceilingLight1 = ceilingLight1;
+        gameState.ceilingLight2 = ceilingLight2;
+        gameState.flickerActive = false;
+        gameState.flickerTimer = 0;
+        gameState.flickerBaseAmbient = 2.2;
 
         createVRUI();
         setupVRControllers();
@@ -1676,6 +1991,7 @@
             erRoom = gltf.scene;
             erRoom.scale.set(1, 1, 1);
             erRoom.position.y = 0;
+            erRoom.traverse(c => { if (c.isMesh) { c.receiveShadow = true; c.castShadow = true; } });
             scene.add(erRoom);
             loadPatient();
           },
@@ -1696,6 +2012,7 @@
             patientModel.scale.set(0.022, 0.022, 0.022);
             patientModel.position.set(1.75, 0.75, 1.3);
             patientModel.rotation.y = Math.PI;
+            patientModel.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
             scene.add(patientModel);
             controls.target.copy(patientModel.position);
             startGame();
@@ -1833,11 +2150,15 @@
         } else {
           choiceWindow.style.display = "block";
         }
+
+        // Start countdown timer for this question
+        startQuestionTimer();
       }
 
       function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
         const scenario = scenarios[scenarioIndex];
         choiceWindow.style.display = "none";
+        stopQuestionTimer();
 
         if (vrMenuGroup) vrMenuGroup.visible = false;
 
@@ -1858,6 +2179,8 @@
         }
 
         if (isCorrect) {
+          window._gameScore.correct++;
+          spawnParticles("drip");
           vitals.pulse = Math.max(PULSE_MIN, vitals.pulse + pulseChange);
           vitals.consecutiveWrongAnswers = 0;
           feedbackTitle.textContent = "CORRECT";
@@ -1878,6 +2201,10 @@
             return;
           }
 
+          window._gameScore.wrong++;
+          window._gameScore.missed.push(scenarioIndex + 1);
+          playWrongBuzz();
+          spawnParticles("blood");
           feedbackTitle.textContent = "INCORRECT";
           feedbackTitle.style.color = "#ff4444";
           feedbackMessage.textContent = scenario.incorrectFeedback;
@@ -1890,6 +2217,12 @@
         }
 
         updateVitalUI();
+
+        // Append rationale to feedback
+        if (scenario.rationale) {
+          const rationaleEl = document.getElementById("feedbackRationale");
+          if (rationaleEl) rationaleEl.textContent = "📋 " + scenario.rationale;
+        }
 
         if (renderer.xr.isPresenting) {
           updateVRFeedback(
@@ -1917,6 +2250,14 @@
         pulseValueUI.textContent = displayPulse;
         condBpUI.textContent = `${vitals.bpSystolic}/${vitals.bpDiastolic}`;
         condRespUI.textContent = vitals.respirations;
+        // Update HUD monitor
+        const monBp = document.getElementById("monitorBp");
+        const monResp = document.getElementById("monitorResp");
+        if (monBp) {
+          monBp.textContent = `${vitals.bpSystolic}/${vitals.bpDiastolic}`;
+          monBp.style.color = vitals.bpSystolic < 70 ? "#ff4444" : vitals.bpSystolic < 85 ? "#ffff00" : "#ffaa44";
+        }
+        if (monResp) monResp.textContent = vitals.respirations;
 
         const animationSpeed = 60 / displayPulse;
         pulseValueUI.style.animationDuration = `${animationSpeed}s`;
@@ -1947,6 +2288,10 @@
 
         updateVRPulse(displayPulse, colorHex);
 
+        // Update vitals trend graph
+        pushTrend();
+        drawTrend();
+
         if (vrPulseGroup && renderer.xr.isPresenting)
           vrPulseGroup.visible = true;
 
@@ -1975,12 +2320,20 @@
           if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
             endSimulation(false);
           }
+          if (vitals.bpSystolic <= 65) {
+            endSimulation(false);
+          }
 
           gameState.lastVitalUpdate = now;
         }
       }
 
       function endSimulation(isSuccess) {
+        window._gameScore.endTime = Date.now();  // freeze timer
+        gameState.simEnded = true;
+        stopQuestionTimer();
+        const tc = document.getElementById("vitalsTrendCanvas");
+        if (tc) tc.style.display = "none";
         choiceWindow.style.display = "none";
         feedbackPanel.style.display = "none";
 
@@ -2047,23 +2400,54 @@
           endScreen.style.background = "black";
         }
 
+        const score = window._gameScore;
+        const total = score.correct + score.wrong;
+        const pct = total > 0 ? Math.round((score.correct / total) * 100) : 0;
+        const elapsed = Math.round(((score.endTime || Date.now()) - score.startTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
         const endTitle = document.createElement("h2");
         endTitle.style.fontSize = "2.5rem";
-        endTitle.style.marginBottom = "1.5rem";
+        endTitle.style.marginBottom = "0.5rem";
         endTitle.style.color = isSuccess ? "#00ff9d" : "#ff4444";
-        endTitle.textContent = isSuccess ? "SUCCESS" : "FAILURE";
+        endTitle.textContent = isSuccess ? "PATIENT STABILIZED" : "PATIENT DECEASED";
 
         const endMessage = document.createElement("p");
-        endMessage.style.fontSize = "1.2rem";
+        endMessage.style.fontSize = "1rem";
         endMessage.style.maxWidth = "600px";
         endMessage.style.lineHeight = "1.6";
+        endMessage.style.color = "#ccc";
+        endMessage.style.marginBottom = "1.5rem";
         endMessage.textContent = isSuccess
           ? "Correct prioritization under pressure prevented cardiac arrest."
           : "Delayed or incorrect decisions resulted in patient death.";
 
-        const restartButton = document.createElement("button");
+        // Debrief card
+        const debrief = document.createElement("div");
+        debrief.style.cssText = "background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:1.2rem 2rem;max-width:480px;width:100%;margin-bottom:1.5rem;text-align:left;font-family:Courier New,monospace;";
+        debrief.innerHTML = `
+          <div style="font-size:0.75rem;letter-spacing:2px;color:#888;margin-bottom:0.8rem;">SIMULATION DEBRIEF</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
+            <div style="text-align:center;">
+              <div style="font-size:2rem;font-weight:bold;color:${pct>=70?'#00ff9d':pct>=50?'#ffff00':'#ff4444'}">${pct}%</div>
+              <div style="font-size:0.7rem;color:#888;letter-spacing:1px;">ACCURACY</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:2rem;font-weight:bold;color:#aaddff">${score.correct}/${total}</div>
+              <div style="font-size:0.7rem;color:#888;letter-spacing:1px;">CORRECT</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:2rem;font-weight:bold;color:#ffaa44">${timeStr}</div>
+              <div style="font-size:0.7rem;color:#888;letter-spacing:1px;">TIME</div>
+            </div>
+          </div>
+          ${score.missed.length > 0 ? `<div style="font-size:0.8rem;color:#ff9999;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.8rem;">⚠ Review questions: ${score.missed.map(n=>'Q'+n).join(', ')}</div>` : `<div style="font-size:0.8rem;color:#00ff9d;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.8rem;">✓ Perfect score — no questions missed.</div>`}
+        `;
 
-        restartButton.style.marginTop = "2rem";
+        const restartButton = document.createElement("button");
+        restartButton.style.marginTop = "0.5rem";
         restartButton.style.padding = "1rem 3rem";
         restartButton.style.fontSize = "1.2rem";
         restartButton.style.fontWeight = "bold";
@@ -2081,6 +2465,7 @@
 
         endScreen.appendChild(endTitle);
         endScreen.appendChild(endMessage);
+        endScreen.appendChild(debrief);
         endScreen.appendChild(restartButton);
         document.body.appendChild(endScreen);
       }
@@ -2099,6 +2484,7 @@
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
+        if (composer) composer.setSize(window.innerWidth, window.innerHeight);
       }
 
       function renderLoop() {
@@ -2110,7 +2496,52 @@
           controls.update();
         }
 
-        emergencyLights.intensity = 0.3 + Math.sin(Date.now() * 0.001) * 0.1;
+        const now_rl = Date.now();
+        const pulse_rl = vitals.pulse;
+        const inCritical_rl = pulse_rl > 140 || pulse_rl < 80;
+        const inWarning_rl = !inCritical_rl && (pulse_rl > 120 || pulse_rl < 100);
+
+        // --- DYNAMIC LIGHTING based on patient state ---
+        if (inCritical_rl) {
+          // Emergency red light pulses fast with heartbeat
+          emergencyLights.intensity = 0.6 + Math.sin(now_rl * 0.008) * 0.4;
+
+          // Ceiling flicker: random stutters to simulate power/stress
+          gameState.flickerTimer -= 1;
+          if (gameState.flickerTimer <= 0) {
+            gameState.flickerActive = !gameState.flickerActive;
+            // Flicker faster in critical state
+            gameState.flickerTimer = gameState.flickerActive
+              ? Math.floor(Math.random() * 4 + 1)   // off for 1–4 frames
+              : Math.floor(Math.random() * 20 + 6); // on for 6–25 frames
+          }
+          const flickerMult = gameState.flickerActive ? 0.15 : 1.0;
+          ambientLight.intensity = gameState.flickerBaseAmbient * flickerMult;
+          if (gameState.ceilingLight1) {
+            gameState.ceilingLight1.intensity = 3.0 * flickerMult;
+            gameState.ceilingLight2.intensity = 2.5 * flickerMult;
+          }
+        } else if (inWarning_rl) {
+          // Warning: subtle red glow, no flicker
+          emergencyLights.intensity = 0.2 + Math.sin(now_rl * 0.003) * 0.1;
+          ambientLight.intensity = gameState.flickerBaseAmbient || 2.2;
+          if (gameState.ceilingLight1) {
+            gameState.ceilingLight1.intensity = 3.0;
+            gameState.ceilingLight2.intensity = 2.5;
+          }
+          gameState.flickerActive = false;
+          gameState.flickerTimer = 0;
+        } else {
+          // Stable: clean bright hospital light, no red
+          emergencyLights.intensity = 0.0;
+          ambientLight.intensity = gameState.flickerBaseAmbient || 2.2;
+          if (gameState.ceilingLight1) {
+            gameState.ceilingLight1.intensity = 3.0;
+            gameState.ceilingLight2.intensity = 2.5;
+          }
+          gameState.flickerActive = false;
+          gameState.flickerTimer = 0;
+        }
 
         updateVitals();
         checkPatientHover();
@@ -2123,7 +2554,23 @@
           placePulseHUD();
         }
 
-        renderer.render(scene, camera);
+        // Update particles
+        updateParticles();
+
+        // Post-processing: bloom + vignette tied to vitals
+        if (!renderer.xr.isPresenting && composer) {
+          if (inCritical_rl) {
+            bloomPass.strength = Math.min(1.4, 0.3 + (Math.abs(pulse_rl - 110) / 110) * 1.2);
+          } else {
+            bloomPass.strength = 0.15;
+          }
+          const baseVig = inCritical_rl ? 0.55 : inWarning_rl ? 0.15 : 0.0;
+          const vigWave = inCritical_rl ? Math.sin(now_rl * 0.004) * 0.18 : 0;
+          vignettePass.uniforms.vignetteStrength.value = baseVig + vigWave;
+          composer.render();
+        } else {
+          renderer.render(scene, camera);
+        }
       }
     </script>
   </body>
