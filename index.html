@@ -254,7 +254,7 @@
 
       .pulse-red {
         color: #ff4444;
-      }
+      } /* Critical: <80 BPM and dropping */
 
       .pulse-label {
         font-size: 0.75rem;
@@ -316,36 +316,17 @@
       /* Vitals trend graph */
       #vitalsTrendCanvas {
         position: absolute;
-        top: 210px;
-        right: 20px;
+        bottom: 20px;
+        right: 180px;
         background: rgba(0,0,0,0.82);
         border: 2px solid #00ff9d;
         border-radius: 10px;
         z-index: 900;
-        width: 135px;
-        height: 70px;
+        width: 280px;
+        height: 100px;
       }
 
-      /* Countdown timer */
-      #questionTimer {
-        position: absolute;
-        top: 290px;
-        right: 20px;
-        background: rgba(0,0,0,0.85);
-        border: 2px solid #ff4444;
-        border-radius: 8px;
-        padding: 0.3rem 0.5rem;
-        font-family: "Courier New", monospace;
-        color: white;
-        font-size: 0.95rem;
-        font-weight: bold;
-        z-index: 900;
-        display: none;
-        width: 135px;
-        text-align: center;
-        box-sizing: border-box;
-      }
-      #questionTimer.timer-warn { color: #ff4444; border-color: #ff0000; animation: pulse-flash 0.4s infinite; }
+
 
       /* Blood particle canvas */
       #particleCanvas {
@@ -413,12 +394,12 @@
   </head>
 
   <body>
-    <!-- Cover Screen -->
+    <!-- Cover Screen (Visible on Load) -->
     <div class="cover-screen" id="cover-screen">
       <button class="play-button" id="play-button">Play</button>
     </div>
 
-    <!-- Loading Screen -->
+    <!-- Loading Screen (Hospital Monitor Style) -->
     <div class="loading-screen" id="loading-screen">
       <div class="status-container">
         <div class="ecg-container" id="ecg-container"></div>
@@ -470,10 +451,7 @@
     <div id="game-content">
 
       <!-- Vitals Trend Graph -->
-      <canvas id="vitalsTrendCanvas" width="135" height="70"></canvas>
-
-      <!-- Question Countdown Timer -->
-      <div id="questionTimer">⏱ 30</div>
+      <canvas id="vitalsTrendCanvas" width="280" height="100"></canvas>
 
       <!-- Particle Canvas (blood/IV drip) -->
       <canvas id="particleCanvas"></canvas>
@@ -559,6 +537,7 @@
       preload="auto"
     > </audio>
 
+    <!-- New Audio Elements Added -->
     <audio
       id="loadingHeartbeat"
       src="heartbeat/heartbeep.mp3"
@@ -581,7 +560,7 @@
         }
       }
     </script>
-    <!-- Score tracking -->
+    <!-- Score tracking for debrief -->
     <script>
       window._gameScore = { correct: 0, wrong: 0, missed: [], startTime: Date.now(), endTime: null };
     </script>
@@ -1065,9 +1044,9 @@
         },
       ];
 
-      // ════════════════════════════════
-      // VITALS TREND GRAPH 
-      // ════════════════════════════════ 
+      // ═══════════════════════════════════════════════════════
+      // FEATURE 1 — VITALS TREND GRAPH (live pulse sparkline)
+      // ═══════════════════════════════════════════════════════
       const trendCanvas = document.getElementById("vitalsTrendCanvas");
       const trendCtx = trendCanvas.getContext("2d");
       const TREND_MAX = 60;      // data points to keep
@@ -1122,46 +1101,8 @@
         trendCtx.fillText(Math.round(vitals.pulse) + " bpm", w - 50, 10);
       }
 
-      // ══════════════════════════════════════════════════
-      // QUESTION COUNTDOWN TIMER
-      // ══════════════════════════════════════════════════
-      const timerEl = document.getElementById("questionTimer");
-      let timerInterval = null;
-      let timerSeconds = 0;
-      const TIMER_DURATION = 30;
-
-      function startQuestionTimer() {
-        clearInterval(timerInterval);
-        timerSeconds = TIMER_DURATION;
-        timerEl.style.display = "block";
-        timerEl.classList.remove("timer-warn");
-        timerEl.textContent = "⏱ " + timerSeconds;
-
-        timerInterval = setInterval(() => {
-          if (gameState.simEnded) { clearInterval(timerInterval); timerEl.style.display = "none"; return; }
-          timerSeconds--;
-          timerEl.textContent = "⏱ " + timerSeconds;
-          if (timerSeconds <= 10) timerEl.classList.add("timer-warn");
-          if (timerSeconds <= 0) {
-            clearInterval(timerInterval);
-            timerEl.style.display = "none";
-            // Auto-select wrong answer (first incorrect option) as time penalty
-            const idx = gameState.currentScenario - 1;
-            const scenario = scenarios[idx];
-            const wrongOpt = scenario.options.find(o => !o.correct);
-            if (wrongOpt) handleAnswer(idx, false, wrongOpt.pulseChange);
-          }
-        }, 1000);
-      }
-
-      function stopQuestionTimer() {
-        clearInterval(timerInterval);
-        timerEl.style.display = "none";
-        timerEl.classList.remove("timer-warn");
-      }
-
       // ═══════════════════════════════════════════════════
-      // PARTICLE SYSTEM (blood/IV drip)
+      // FEATURE 4 — PARTICLE SYSTEM (blood/IV drip)
       // ═══════════════════════════════════════════════════
       const pCanvas = document.getElementById("particleCanvas");
       const pCtx = pCanvas.getContext("2d");
@@ -1226,7 +1167,7 @@
       }
 
       // ══════════════════════════════════════════════════
-      // WRONG ANSWER SOUND CUE
+      // FEATURE 5 — WRONG ANSWER SOUND CUE
       // ══════════════════════════════════════════════════
       function playWrongBuzz() {
         try {
@@ -1332,7 +1273,7 @@
         vrBtn.style.zIndex = "100000";
         document.body.appendChild(vrBtn);
 
-        // POST PROCESSING SETUP 
+        // --- POST-PROCESSING SETUP ---
         const vignetteShader = {
           uniforms: {
             tDiffuse: { value: null },
@@ -1368,7 +1309,7 @@
         vignettePass = new ShaderPass(vignetteShader);
         vignettePass.renderToScreen = true;
         composer.addPass(vignettePass);
-        // END 
+        // --- END POST-PROCESSING ---
 
         renderer.xr.addEventListener("sessionstart", () => {
           pendingRecenter = true;
@@ -1439,7 +1380,7 @@
           handleMouseClick();
         });
 
-        // Lighting setup
+        // Lighting — bright hospital fluorescent look
         ambientLight = new THREE.AmbientLight(0xf0f8ff, 2.2);  // cool white, strong fill
         directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
         directionalLight.position.set(5, 8, 3);
@@ -1449,7 +1390,7 @@
         directionalLight.shadow.camera.near = 0.5;
         directionalLight.shadow.camera.far = 30;
 
-        // Overhead ceiling fill 
+        // Overhead ceiling fill — simulates fluorescent banks
         const ceilingLight1 = new THREE.PointLight(0xe8f4ff, 3.0, 12);
         ceilingLight1.position.set(0, 5, 1);
         const ceilingLight2 = new THREE.PointLight(0xe8f4ff, 2.5, 12);
@@ -2150,15 +2091,12 @@
         } else {
           choiceWindow.style.display = "block";
         }
-
-        // Start countdown timer for this question
-        startQuestionTimer();
+;
       }
 
       function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
         const scenario = scenarios[scenarioIndex];
         choiceWindow.style.display = "none";
-        stopQuestionTimer();
 
         if (vrMenuGroup) vrMenuGroup.visible = false;
 
@@ -2331,7 +2269,6 @@
       function endSimulation(isSuccess) {
         window._gameScore.endTime = Date.now();  // freeze timer
         gameState.simEnded = true;
-        stopQuestionTimer();
         const tc = document.getElementById("vitalsTrendCanvas");
         if (tc) tc.style.display = "none";
         choiceWindow.style.display = "none";
