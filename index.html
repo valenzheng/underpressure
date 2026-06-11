@@ -20,7 +20,7 @@
       .cover-screen {
         position: fixed;
         top: 0;
-        left: 0;     
+        left: 0;
         width: 100vw;
         height: 100vh;
         background-image: url("cover.png");
@@ -193,7 +193,6 @@
         border-radius: 5px;
         margin-bottom: 1.5rem;
         border-left: 3px solid #ff4444;
-        display: none;  /* hidden — info lives in patient chart overlay */
       }
 
       .choice-option {
@@ -927,8 +926,8 @@
         lastPulseChange: Date.now(),
       };
 
-      const PULSE_MIN = 40;    // death threshold (flatline)
-      const PULSE_MAX = 185;   // death threshold (fatal tachycardia)
+      const PULSE_MIN = 25;    // death threshold (flatline) — low enough correct answers can't hit it
+      const PULSE_MAX = 190;   // death threshold (fatal tachycardia)
 
       let gameState = {
         simEnded: false,
@@ -2358,31 +2357,35 @@
           "patient2.glb",
           (gltf) => {
             patient2Model = gltf.scene;
-            // patient2.glb is standing — lay her down on the bed
-            // Scale to match patient1, rotate to lie flat (X = -PI/2 lays model on back),
-            // then rotate Y to face same direction as patient1
-            /*
-            patientModel.scale.set(0.022, 0.022, 0.022);
-            patientModel.position.set(1.75, 0.75, 1.3);
-            patientModel.rotation.y = Math.PI;
-            patientModel.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-            scene.add(patientModel);
-            controls.target.copy(patientModel.position);
-            loadPatient2(startGame);
-          },
-          (xhr) => console.log(`Patient 1: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`),
-          (error) => alert("Failed to load patient.glb")
-        );
-      }*/
-          
-            patient2Model.scale.set(0.022, 0.022, 0.022);
-            patient2Model.position.set(1.75, 0.75, 1.3);
+            // patient2.glb is a standing model — lay her on the bed.
+            // We compute the model's bounding box to auto-scale her to match
+            // patient1's approximate size, then rotate to recline.
+            const p2box = new THREE.Box3().setFromObject(patient2Model);
+            const p2size = new THREE.Vector3();
+            p2box.getSize(p2size);
+            // Target height when lying = ~1.7m body length → scale so tallest dim = 1.7
+            const tallestDim = Math.max(p2size.x, p2size.y, p2size.z);
+            const targetLen = 1.7;
+            const p2scale = targetLen / (tallestDim || 1);
+            patient2Model.scale.setScalar(p2scale);
+
+            // Lay flat: rotate -90° around X so the standing model lies on its back
             patient2Model.rotation.order = "YXZ";
-            patientModel.rotation.y = Math.PI;
-            patientModel.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });way as patient1
+            patient2Model.rotation.x = -Math.PI / 2;
+            patient2Model.rotation.y = 0;
+            patient2Model.rotation.z = 0;
+
+            // After scaling + rotation, recompute bounds to sit on the bed
+            patient2Model.updateMatrixWorld(true);
+            const p2box2 = new THREE.Box3().setFromObject(patient2Model);
+            const p2min = p2box2.min;
+            // Place so bottom of model sits at bed surface (y ≈ 0.75)
+            patient2Model.position.set(1.75, 0.75 - p2min.y, 1.3);
+
             patient2Model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-            patient2Model.visible = false;  // hidden until patient 2 case
+            patient2Model.visible = false;
             scene.add(patient2Model);
+            console.log("patient2 scale:", p2scale.toFixed(4), "size:", p2size.x.toFixed(2), p2size.y.toFixed(2), p2size.z.toFixed(2));
             if (callback) callback();
           },
           (xhr) => console.log(`Patient 2: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`),
@@ -2503,9 +2506,12 @@
 
         updateVitalUI();
 
-        // Show chart button only from Q2 onward (index >= 1)
+        // Q1: show patient condition, hide chart button
+        // Q2+: hide patient condition, show chart button
         const chartBtnEl = document.getElementById("chartBtn");
+        const condEl = document.getElementById("patientCondition");
         if (chartBtnEl) chartBtnEl.style.display = index >= 1 ? "inline-block" : "none";
+        if (condEl) condEl.style.display = index === 0 ? "block" : "none";
 
         if (renderer.xr.isPresenting) {
           updateVRMenu(index);
@@ -2613,7 +2619,7 @@
           feedbackPanel.style.display = "block";
         }
 
-        if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
+        if (vitals.pulse >= PULSE_MAX || vitals.pulse <= PULSE_MIN) {
           endSimulation(false);
         }
       }
@@ -2701,7 +2707,7 @@
           updateVitalUI();
           console.log("Vitals worsened | Pulse:", vitals.pulse);
 
-          if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
+          if (vitals.pulse >= PULSE_MAX || vitals.pulse <= PULSE_MIN) {
             endSimulation(false);
           }
           if (vitals.bpSystolic <= 65) {
@@ -2743,7 +2749,9 @@
         trendHistory.length = 0;
 
         // Reset patientCondition back to Jordan R.
-        document.getElementById("patientCondition").innerHTML = `
+        const condEl1 = document.getElementById("patientCondition");
+        condEl1.style.display = "block";  // will be hidden by showScenario from Q2+
+        condEl1.innerHTML = `
           <p><strong>Patient: Jordan R., 28</strong></p>
           <p><strong>Mechanism of Injury:</strong> Motorcycle crash</p>
           <p><strong>Current Status:</strong> Pale, cool, clammy skin | Rigid abdomen on palpation</p>
@@ -2800,7 +2808,9 @@
         if (pulseLabel) pulseLabel.textContent = "Patient's Pulse (BPM)";
 
         // Update the static patient condition section
-        document.getElementById("patientCondition").innerHTML = `
+        const condEl2 = document.getElementById("patientCondition");
+        condEl2.style.display = "block";  // will be hidden by showScenario from Q2+
+        condEl2.innerHTML = `
           <p><strong>Patient: Maria Lopez, 56</strong></p>
           <p><strong>Chief Complaint:</strong> Fever, weakness, confusion</p>
           <p><strong>History:</strong> UTI diagnosed 3 days ago</p>
