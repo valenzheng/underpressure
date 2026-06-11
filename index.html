@@ -337,7 +337,70 @@
         z-index: 850;
       }
 
+      /* Patient Chart Overlay */
+      #patientChartOverlay {
+        display: none;
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(10,15,30,0.97);
+        border: 2px solid #4488ff;
+        border-radius: 12px;
+        padding: 1.2rem 1.6rem 1.4rem;
+        font-family: "Courier New", monospace;
+        color: #ddeeff;
+        z-index: 1200;
+        min-width: 340px;
+        max-width: 480px;
+        box-shadow: 0 0 30px rgba(68,136,255,0.25);
+      }
+      #patientChartOverlay h3 {
+        font-size: 1rem;
+        letter-spacing: 2px;
+        color: #4488ff;
+        margin: 0 0 0.8rem;
+        text-transform: uppercase;
+      }
+      #patientChartOverlay .chart-row {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        padding: 0.35rem 0;
+        font-size: 0.82rem;
+      }
+      #patientChartOverlay .chart-row .label { color: #778899; }
+      #patientChartOverlay .chart-row .value { color: #eef4ff; font-weight: bold; }
+      #chartCloseBtn {
+        position: absolute;
+        top: 10px;
+        left: 14px;
+        background: none;
+        border: none;
+        color: #aabbcc;
+        font-size: 1.1rem;
+        cursor: pointer;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      #chartCloseBtn:hover { background: rgba(255,255,255,0.1); color: white; }
+      #chartBtn {
+        margin-top: 0.8rem;
+        padding: 0.4rem 1rem;
+        font-size: 0.78rem;
+        background: rgba(68,136,255,0.2);
+        border: 1px solid #4488ff;
+        color: #aaddff;
+        border-radius: 5px;
+        cursor: pointer;
+        font-family: "Courier New", monospace;
+        letter-spacing: 1px;
+      }
+      #chartBtn:hover { background: rgba(68,136,255,0.35); }
+
       @keyframes pulse-flash {
+
 
         0% {
           opacity: 0.4;
@@ -466,6 +529,13 @@
         <div id="monitorResp" style="font-size:1rem;font-weight:bold;color:#aaddff;margin:4px 0;">28</div>
       </div>
 
+      <!-- Patient Chart Overlay -->
+      <div id="patientChartOverlay">
+        <button id="chartCloseBtn" title="Close chart">✕</button>
+        <h3>📋 Patient Chart</h3>
+        <div id="chartContent"></div>
+      </div>
+
       <!-- Choice Window -->
       <div class="choice-window" id="choiceWindow">
         <h3 id="choicePrompt">Patient Assessment</h3>
@@ -486,6 +556,7 @@
           <p><strong>Complaint:</strong> Severe abdominal pain</p>
         </div>
         <div class="choice-options" id="choiceOptions"></div>
+        <button id="chartBtn">📋 PATIENT CHART</button>
       </div>
 
       <!-- Feedback Panel -->
@@ -840,8 +911,10 @@
       let vrEndGroup;
       let vrEndButtons = [];
 
-      let erRoom, patientModel;
+      let erRoom, patientModel, patient2Model;
       let ambientLight, directionalLight, emergencyLights;
+      let currentPatient = 1;   // 1 = Jordan R., 2 = Maria Lopez
+      let patient1Success = false;
 
       let vitals = {
         pulse: 130,
@@ -1044,6 +1117,178 @@
         },
       ];
 
+      // ─────────────────────────────────────────────────────────
+      // PATIENT 2 — MARIA LOPEZ (Septic Shock)
+      // ─────────────────────────────────────────────────────────
+      const scenarios2 = [
+        {
+          prompt: "What finding is MOST concerning right now?",
+          options: [
+            { text: "A. Fever of 103.1°F", correct: false, pulseChange: +8 },
+            { text: "B. Elevated respiratory rate", correct: false, pulseChange: +8 },
+            { text: "C. Low blood pressure of 86/54", correct: true, pulseChange: -6 },
+            { text: "D. Confusion", correct: false, pulseChange: +10 },
+          ],
+          correctFeedback: "Correct! Low blood pressure indicates poor tissue perfusion and possible septic shock.",
+          incorrectFeedback: "Incorrect. Hypotension is the most life-threatening finding — organ damage occurs rapidly when circulation is compromised.",
+          rationale: "While all findings are concerning, hypotension (86/54) signals hemodynamic instability. Septic shock is defined by persistent hypotension despite fluid resuscitation, requiring vasopressors to maintain perfusion.",
+          bpChange: { systolic: 0, diastolic: 0 },
+        },
+        {
+          prompt: "Which recent history finding most likely contributed to her condition?",
+          options: [
+            { text: "A. Mild hypertension", correct: false, pulseChange: +10 },
+            { text: "B. Urinary tract infection", correct: true, pulseChange: -7 },
+            { text: "C. Seasonal allergies", correct: false, pulseChange: +10 },
+            { text: "D. Chronic back pain", correct: false, pulseChange: +10 },
+          ],
+          correctFeedback: "Correct! Untreated UTIs are a common cause of sepsis, especially in older adults.",
+          incorrectFeedback: "Incorrect. The UTI is the likely source — bacteria enter the bloodstream and trigger a systemic inflammatory response.",
+          rationale: "Urosepsis accounts for roughly 25% of all sepsis cases. In elderly patients, atypical presentation (confusion, weakness) is common. A UTI diagnosed 3 days ago without adequate treatment is the clear infection source here.",
+          bpChange: { systolic: -2, diastolic: -1 },
+        },
+        {
+          prompt: "What condition best explains the patient's symptoms?",
+          options: [
+            { text: "A. Stroke", correct: false, pulseChange: +12 },
+            { text: "B. Heart failure", correct: false, pulseChange: +12 },
+            { text: "C. Septic shock", correct: true, pulseChange: -8 },
+            { text: "D. Asthma exacerbation", correct: false, pulseChange: +12 },
+          ],
+          correctFeedback: "Correct! Fever, hypotension, tachycardia, altered mental status, and known infection strongly suggest septic shock.",
+          incorrectFeedback: "Incorrect. Septic shock is defined by the combination of infection, systemic inflammatory response, and organ hypoperfusion. Heart rate will increase.",
+          rationale: "SIRS criteria: temp >38°C, HR >90, RR >20, altered WBC. Combined with infection and hypotension, this meets septic shock criteria. Stroke would show focal neurologic deficits; heart failure would show pulmonary congestion.",
+          bpChange: { systolic: -3, diastolic: -2 },
+        },
+        {
+          prompt: "What should guide nursing care RIGHT NOW?",
+          options: [
+            { text: "A. Complete head-to-toe assessment", correct: false, pulseChange: +8 },
+            { text: "B. ABCs / Primary survey", correct: true, pulseChange: -6 },
+            { text: "C. Pain assessment", correct: false, pulseChange: +8 },
+            { text: "D. Fall-risk evaluation", correct: false, pulseChange: +8 },
+          ],
+          correctFeedback: "Correct! Airway, breathing, and circulation must always take priority when a patient is unstable.",
+          incorrectFeedback: "Incorrect. ABCs come first — always. A fall-risk evaluation while the patient is in shock can be fatal.",
+          rationale: "The primary survey identifies and addresses immediate life threats in order: Airway → Breathing → Circulation → Disability → Exposure. Secondary surveys (including fall risk and pain) are performed only once the patient is stabilized.",
+          bpChange: { systolic: -2, diastolic: -1 },
+        },
+        {
+          prompt: "What intervention should occur immediately to improve oxygen delivery?",
+          options: [
+            { text: "A. Encourage deep breathing only", correct: false, pulseChange: +12 },
+            { text: "B. Apply supplemental oxygen", correct: true, pulseChange: -7 },
+            { text: "C. Wait for respiratory therapy", correct: false, pulseChange: +14 },
+            { text: "D. Obtain another temperature reading", correct: false, pulseChange: +10 },
+          ],
+          correctFeedback: "Correct! Supplemental oxygen supports tissue perfusion while definitive sepsis treatment is initiated.",
+          incorrectFeedback: "Incorrect. SpO2 92% is below the goal of ≥95% in sepsis. Waiting worsens tissue hypoxia.",
+          rationale: "Sepsis impairs oxygen delivery through vasodilation and microvascular dysfunction. Supplemental O2 targets SpO2 ≥94%. In severe cases, high-flow oxygen via non-rebreather mask may be needed to maintain saturation.",
+          bpChange: { systolic: -2, diastolic: -1 },
+        },
+        {
+          prompt: "What intervention is most appropriate for the falling blood pressure?",
+          options: [
+            { text: "A. Restrict fluids", correct: false, pulseChange: +15 },
+            { text: "B. Begin IV fluid resuscitation", correct: true, pulseChange: -10 },
+            { text: "C. Administer insulin", correct: false, pulseChange: +12 },
+            { text: "D. Give oral hydration", correct: false, pulseChange: +18 },
+          ],
+          correctFeedback: "Correct! IV fluids are a cornerstone of sepsis treatment and help restore circulation and blood pressure.",
+          incorrectFeedback: "Incorrect. Circulatory support delayed — BP continues falling.",
+          rationale: "Sepsis Hour-1 Bundle includes 30 mL/kg IV crystalloid for hypotension or lactate ≥4. Early aggressive fluid resuscitation improves tissue perfusion and is one of the strongest mortality-reducing interventions in sepsis management.",
+          bpChange: { systolic: -3, diastolic: -2 },
+          penalty: "ivPenalty",
+        },
+        {
+          prompt: "What treatment is most important to initiate early in suspected sepsis?",
+          options: [
+            { text: "A. Broad-spectrum antibiotics", correct: true, pulseChange: -10 },
+            { text: "B. Sedatives", correct: false, pulseChange: +20 },
+            { text: "C. Blood transfusion", correct: false, pulseChange: +15 },
+            { text: "D. Anticoagulants", correct: false, pulseChange: +15 },
+          ],
+          correctFeedback: "Correct! Early broad-spectrum antibiotics significantly reduce sepsis mortality.",
+          incorrectFeedback: "Incorrect. Source of infection remains uncontrolled — every hour of delay in antibiotics worsens outcomes.",
+          rationale: "For every hour of delay in antibiotic administration in septic shock, mortality increases by ~7%. Broad-spectrum coverage is used empirically until culture results guide de-escalation. The Sepsis-3 Hour Bundle mandates antibiotics within 3 hours.",
+          bpChange: { systolic: -4, diastolic: -2 },
+          critical: true,
+        },
+        {
+          prompt: "Which laboratory test is especially important in suspected sepsis?",
+          options: [
+            { text: "A. Pregnancy test", correct: false, pulseChange: +12 },
+            { text: "B. Serum lactate level", correct: true, pulseChange: -8 },
+            { text: "C. Cholesterol panel", correct: false, pulseChange: +12 },
+            { text: "D. Thyroid function tests", correct: false, pulseChange: +12 },
+          ],
+          correctFeedback: "Correct! Elevated lactate indicates poor tissue perfusion and helps assess sepsis severity.",
+          incorrectFeedback: "Incorrect. Serum lactate ≥2 mmol/L is a key indicator of inadequate tissue oxygenation and guides resuscitation goals.",
+          rationale: "Lactate is a byproduct of anaerobic metabolism when cells are oxygen-deprived. A lactate ≥4 mmol/L is a diagnostic criterion for septic shock. Serial lactate measurements guide resuscitation effectiveness — clearance of ≥10% in 2 hours is the goal.",
+          bpChange: { systolic: -4, diastolic: -2 },
+        },
+        {
+          prompt: "Despite treatment, BP remains 78/48. What should the nurse do next?",
+          options: [
+            { text: "A. Continue observing", correct: false, pulseChange: +22 },
+            { text: "B. Prepare for vasopressor support and notify the sepsis team", correct: true, pulseChange: -12 },
+            { text: "C. Focus on fever reduction only", correct: false, pulseChange: +20 },
+            { text: "D. Schedule discharge planning", correct: false, pulseChange: +25 },
+          ],
+          correctFeedback: "Correct! Persistent hypotension despite fluids indicates severe septic shock requiring vasopressors.",
+          incorrectFeedback: "Incorrect. Fluid-refractory hypotension requires vasopressors — norepinephrine is the first-line agent.",
+          rationale: "When MAP remains <65 mmHg despite adequate fluid resuscitation, vasopressor therapy is indicated. Norepinephrine is first-line. Delay in vasopressors leads to prolonged hypoperfusion, organ failure, and death.",
+          bpChange: { systolic: -8, diastolic: -5 },
+          critical: true,
+        },
+        {
+          prompt: "SEPTIC SHOCK PROGRESSION DETECTED — What is your PRIORITY action?",
+          options: [
+            { text: "A. Document findings", correct: false, pulseChange: +30 },
+            { text: "B. Reassess pain level", correct: false, pulseChange: +25 },
+            { text: "C. Continue aggressive sepsis management and notify rapid response team", correct: true, pulseChange: -15 },
+            { text: "D. Obtain a dietary consultation", correct: false, pulseChange: +35 },
+          ],
+          correctFeedback: "Correct! Rapid escalation and aggressive treatment are necessary to prevent organ failure and cardiac arrest.",
+          incorrectFeedback: "Incorrect. Multi-organ failure — BP reaches critical levels. Cardiac arrest imminent.",
+          rationale: "Septic shock is a medical emergency with >40% mortality. Rapid response team activation ensures immediate intensivist involvement. Continued aggressive management per sepsis bundle — antibiotics, fluids, vasopressors, source control — is the only path to survival.",
+          bpChange: { systolic: -10, diastolic: -6 },
+          final: true,
+        },
+      ];
+
+      // Patient chart data for each case
+      const patientCharts = {
+        1: {
+          name: "Jordan R.", age: 28, case: "Trauma — Motorcycle Crash",
+          rows: [
+            ["Mechanism", "Motorcycle crash — blunt abdominal trauma"],
+            ["Status", "Pale, cool, clammy skin"],
+            ["Abdomen", "Rigid on palpation, severe pain"],
+            ["Pulse", "130 BPM (weak, thready)"],
+            ["BP", "88/60 mmHg"],
+            ["Respirations", "28/min"],
+            ["Complaint", "Severe abdominal pain"],
+            ["Concern", "Suspected internal hemorrhage / hypovolemic shock"],
+          ]
+        },
+        2: {
+          name: "Maria Lopez", age: 56, case: "Sepsis — UTI Source",
+          rows: [
+            ["Chief Complaint", "Fever, weakness, confusion"],
+            ["History", "UTI diagnosed 3 days ago"],
+            ["Family Report", "Increasingly confused and lethargic since morning"],
+            ["Temperature", "103.1°F (39.5°C)"],
+            ["Pulse", "124 BPM (rapid)"],
+            ["BP", "86/54 mmHg"],
+            ["Respirations", "30/min"],
+            ["SpO₂", "92%"],
+            ["Skin", "Warm, flushed, delayed responses"],
+            ["Concern", "Suspected septic shock from urosepsis"],
+          ]
+        }
+      };
+
       // ═══════════════════════════════════════════════════════
       // FEATURE 1 — VITALS TREND GRAPH (live pulse sparkline)
       // ═══════════════════════════════════════════════════════
@@ -1118,9 +1363,10 @@
       function spawnParticles(type) {
         // Project patient 3D position to screen
         let sx = window.innerWidth * 0.62, sy = window.innerHeight * 0.55;
-        if (scene && camera && patientModel) {
+        const _activeModel = (currentPatient === 2 && patient2Model) ? patient2Model : patientModel;
+        if (scene && camera && _activeModel) {
           const pos3 = new THREE.Vector3();
-          patientModel.getWorldPosition(pos3);
+          _activeModel.getWorldPosition(pos3);
           pos3.project(camera);
           sx = (pos3.x * 0.5 + 0.5) * window.innerWidth;
           sy = (-pos3.y * 0.5 + 0.5) * window.innerHeight;
@@ -1183,6 +1429,39 @@
           osc.start(); osc.stop(ctx.currentTime + 0.4);
         } catch(e) {}
       }
+
+      // ─────────────────────────────────────────────────────────
+      // PATIENT CHART OVERLAY LOGIC
+      // ─────────────────────────────────────────────────────────
+      const chartOverlay = document.getElementById("patientChartOverlay");
+      const chartBtn = document.getElementById("chartBtn");
+      const chartCloseBtn = document.getElementById("chartCloseBtn");
+      const chartContent = document.getElementById("chartContent");
+
+      function openChart() {
+        const data = patientCharts[currentPatient];
+        chartContent.innerHTML = `
+          <div style="font-size:0.9rem;color:#aabbcc;margin-bottom:0.7rem;">
+            <strong style="color:#ddeeff">${data.name}</strong>, Age ${data.age} &nbsp;|&nbsp; ${data.case}
+          </div>
+          ${data.rows.map(([l,v]) => `<div class="chart-row"><span class="label">${l}</span><span class="value">${v}</span></div>`).join('')}
+        `;
+        choiceWindow.style.display = "none";
+        chartOverlay.style.display = "block";
+      }
+
+      function closeChart() {
+        chartOverlay.style.display = "none";
+        // If a scenario is active, show the choice window again
+        const idx = gameState.currentScenario - 1;
+        const activeScenarios = currentPatient === 1 ? scenarios : scenarios2;
+        if (!gameState.simEnded && idx >= 0 && idx < activeScenarios.length) {
+          choiceWindow.style.display = "block";
+        }
+      }
+
+      chartBtn.addEventListener("click", openChart);
+      chartCloseBtn.addEventListener("click", closeChart);
 
       // Initialize Game
       function initGame() {
@@ -1417,7 +1696,8 @@
           feedbackPanel.style.display = "none";
           gameState.currentScenario++;
 
-          if (gameState.currentScenario > scenarios.length) {
+          const activeScenarios = getActiveScenarios();
+          if (gameState.currentScenario > activeScenarios.length) {
             endSimulation(true);
             return;
           }
@@ -1841,7 +2121,8 @@
           if (intersects.length > 0) {
             vrFeedbackGroup.visible = false;
             gameState.currentScenario++;
-            if (gameState.currentScenario > scenarios.length) {
+            const activeScenarios = getActiveScenarios();
+            if (gameState.currentScenario > activeScenarios.length) {
               endSimulation(true);
             } else {
               showScenario(gameState.currentScenario - 1);
@@ -1909,7 +2190,8 @@
         raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
         raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-        const intersects = raycaster.intersectObject(patientModel, true);
+        const _vrActiveModel = (currentPatient === 2 && patient2Model) ? patient2Model : patientModel;
+        const intersects = _vrActiveModel ? raycaster.intersectObject(_vrActiveModel, true) : [];
         if (intersects.length === 0) return;
 
         gameState.firstQuestionTriggered = true;
@@ -1956,13 +2238,34 @@
             patientModel.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
             scene.add(patientModel);
             controls.target.copy(patientModel.position);
-            startGame();
+            loadPatient2(startGame);
           },
-          (xhr) =>
-            console.log(
-              `Patient: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
-            ),
+          (xhr) => console.log(`Patient 1: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`),
           (error) => alert("Failed to load patient.glb")
+        );
+      }
+
+      function loadPatient2(callback) {
+        const loader = new GLTFLoader();
+        loader.load(
+          "patient2.glb",
+          (gltf) => {
+            patient2Model = gltf.scene;
+            // patient2.glb is standing — lay her down on the bed
+            // Scale to match patient1, rotate to lie flat (X = -PI/2 lays model on back),
+            // then rotate Y to face same direction as patient1
+            patient2Model.scale.set(0.022, 0.022, 0.022);
+            patient2Model.position.set(1.75, 0.75, 1.3);
+            patient2Model.rotation.order = "YXZ";
+            patient2Model.rotation.x = -Math.PI / 2;   // lay flat on back
+            patient2Model.rotation.y = Math.PI;          // face same way as patient1
+            patient2Model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+            patient2Model.visible = false;  // hidden until patient 2 case
+            scene.add(patient2Model);
+            if (callback) callback();
+          },
+          (xhr) => console.log(`Patient 2: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`),
+          (error) => { console.warn("patient2.glb not found"); if (callback) callback(); }
         );
       }
 
@@ -1981,7 +2284,8 @@
           return;
 
         raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObject(patientModel, true);
+        const activeModel = currentPatient === 2 && patient2Model ? patient2Model : patientModel;
+        const intersects = activeModel ? raycaster.intersectObject(activeModel, true) : [];
 
         if (intersects.length > 0) {
           gameState.firstQuestionTriggered = true;
@@ -2009,7 +2313,8 @@
           return;
         }
         raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObject(patientModel, true);
+        const activeModel = currentPatient === 2 && patient2Model ? patient2Model : patientModel;
+        const intersects = activeModel ? raycaster.intersectObject(activeModel, true) : [];
         hoverTooltip.style.display = intersects.length > 0 ? "block" : "none";
       }
 
@@ -2046,8 +2351,13 @@
         return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       }
 
+      function getActiveScenarios() {
+        return currentPatient === 1 ? scenarios : scenarios2;
+      }
+
       function showScenario(index) {
-        const scenario = scenarios[index];
+        const activeScenarios = getActiveScenarios();
+        const scenario = activeScenarios[index];
         choicePrompt.textContent = scenario.prompt;
         choiceOptions.innerHTML = "";
 
@@ -2095,7 +2405,8 @@
       }
 
       function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
-        const scenario = scenarios[scenarioIndex];
+        const activeScenarios = getActiveScenarios();
+        const scenario = activeScenarios[scenarioIndex];
         choiceWindow.style.display = "none";
 
         if (vrMenuGroup) vrMenuGroup.visible = false;
@@ -2266,13 +2577,74 @@
         }
       }
 
+      function startPatient2() {
+        // Reset vitals to Maria Lopez's initial state
+        vitals.pulse = 124;
+        vitals.bpSystolic = 86;
+        vitals.bpDiastolic = 54;
+        vitals.respirations = 30;
+        vitals.consecutiveWrongAnswers = 0;
+        vitals.lastPulseChange = Date.now();
+
+        // Reset game state
+        currentPatient = 2;
+        gameState.simEnded = false;
+        gameState.currentScenario = 1;
+        gameState.ivPenaltyActive = false;
+        gameState.penaltyQuestionCount = 0;
+        gameState.firstQuestionTriggered = false;
+        gameState.lastVitalUpdate = Date.now();
+        gameState.flickerActive = false;
+        gameState.flickerTimer = 0;
+
+        // Reset score for patient 2
+        window._gameScore = { correct: 0, wrong: 0, missed: [], startTime: Date.now(), endTime: null };
+
+        // Swap models: hide patient1, show patient2
+        if (patientModel) patientModel.visible = false;
+        if (patient2Model) patient2Model.visible = true;
+
+        // Update pulse monitor label
+        const pulseLabel = document.querySelector(".pulse-label");
+        if (pulseLabel) pulseLabel.textContent = "Patient's Pulse (BPM)";
+
+        // Update the static patient condition section
+        document.getElementById("patientCondition").innerHTML = `
+          <p><strong>Patient: Maria Lopez, 56</strong></p>
+          <p><strong>Chief Complaint:</strong> Fever, weakness, confusion</p>
+          <p><strong>History:</strong> UTI diagnosed 3 days ago</p>
+          <p>
+            <strong>Vitals:</strong> Pulse
+            <span id="condPulse">124</span> (rapid) | BP
+            <span id="condBp">86/54</span> | Resp
+            <span id="condResp">30</span>/min | SpO₂ 92%
+          </p>
+          <p><strong>Status:</strong> Warm flushed skin, confused, lethargic</p>
+        `;
+
+        // Update hover tooltip
+        hoverTooltip.textContent = "Click to assess patient";
+
+        // Play appropriate beat sound
+        updateVitalUI();
+        playBeatSoundByColor("pulse-yellow");
+
+        // Show the scenario directly (patient is already in scene)
+        setTimeout(() => {
+          showScenario(0);
+          gameState.firstQuestionTriggered = true;
+        }, 800);
+      }
+
       function endSimulation(isSuccess) {
-        window._gameScore.endTime = Date.now();  // freeze timer
+        window._gameScore.endTime = Date.now();
         gameState.simEnded = true;
         const tc = document.getElementById("vitalsTrendCanvas");
         if (tc) tc.style.display = "none";
+        chartOverlay.style.display = "none";
         choiceWindow.style.display = "none";
         feedbackPanel.style.display = "none";
+        if (currentPatient === 1) patient1Success = isSuccess;
 
         audioElements.background.pause();
         stopAllBeatSounds();
@@ -2346,10 +2718,14 @@
         const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
         const endTitle = document.createElement("h2");
-        endTitle.style.fontSize = "2.5rem";
-        endTitle.style.marginBottom = "0.5rem";
+        endTitle.style.fontSize = "2.2rem";
+        endTitle.style.marginBottom = "0.3rem";
         endTitle.style.color = isSuccess ? "#00ff9d" : "#ff4444";
-        endTitle.textContent = isSuccess ? "PATIENT STABILIZED" : "PATIENT DECEASED";
+        if (currentPatient === 1) {
+          endTitle.textContent = isSuccess ? "Patient Stabilized Successfully" : "Patient Deteriorated to Cardiac Arrest";
+        } else {
+          endTitle.textContent = isSuccess ? "Patient Stabilized Successfully" : "Patient Deteriorated to Cardiac Arrest";
+        }
 
         const endMessage = document.createElement("p");
         endMessage.style.fontSize = "1rem";
@@ -2357,9 +2733,15 @@
         endMessage.style.lineHeight = "1.6";
         endMessage.style.color = "#ccc";
         endMessage.style.marginBottom = "1.5rem";
-        endMessage.textContent = isSuccess
-          ? "Correct prioritization under pressure prevented cardiac arrest."
-          : "Delayed or incorrect decisions resulted in patient death.";
+        if (currentPatient === 1) {
+          endMessage.textContent = isSuccess
+            ? "Correct prioritization under pressure prevented cardiac arrest. Jordan R. has been stabilized."
+            : "Delayed or incorrect decisions resulted in patient death. Jordan R. did not survive.";
+        } else {
+          endMessage.textContent = isSuccess
+            ? "Early recognition and treatment of sepsis prevented organ failure and stabilized the patient."
+            : "Delayed recognition and treatment allowed septic shock to progress to multi-organ failure and cardiac arrest.";
+        }
 
         // Debrief card
         const debrief = document.createElement("div");
@@ -2383,27 +2765,63 @@
           ${score.missed.length > 0 ? `<div style="font-size:0.8rem;color:#ff9999;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.8rem;">⚠ Review questions: ${score.missed.map(n=>'Q'+n).join(', ')}</div>` : `<div style="font-size:0.8rem;color:#00ff9d;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.8rem;">✓ Perfect score — no questions missed.</div>`}
         `;
 
-        const restartButton = document.createElement("button");
-        restartButton.style.marginTop = "0.5rem";
-        restartButton.style.padding = "1rem 3rem";
-        restartButton.style.fontSize = "1.2rem";
-        restartButton.style.fontWeight = "bold";
-        restartButton.style.color = "white";
-        restartButton.style.backgroundColor = "#ff4444";
-        restartButton.style.border = "none";
-        restartButton.style.borderRadius = "5px";
-        restartButton.style.cursor = "pointer";
-        restartButton.textContent = "Play Again";
+        // Button row
+        const btnRow = document.createElement("div");
+        btnRow.style.cssText = "display:flex;gap:1rem;margin-top:0.5rem;flex-wrap:wrap;justify-content:center;";
 
+        const restartButton = document.createElement("button");
+        restartButton.style.cssText = "padding:0.9rem 2rem;font-size:1.1rem;font-weight:bold;color:white;background:#cc3333;border:none;border-radius:6px;cursor:pointer;";
+        restartButton.textContent = "Restart Case";
         restartButton.addEventListener("click", () => {
           audioElements.flatline.pause();
           location.reload();
         });
 
-        endScreen.appendChild(endTitle);
-        endScreen.appendChild(endMessage);
-        endScreen.appendChild(debrief);
-        endScreen.appendChild(restartButton);
+        // Next Patient button — only shown for patient 1 end screens
+        if (currentPatient === 1) {
+          const nextPatBtn = document.createElement("button");
+          const locked = !isSuccess;
+          nextPatBtn.style.cssText = locked
+            ? "padding:0.9rem 2rem;font-size:1.1rem;font-weight:bold;color:#888;background:#333;border:1px solid #555;border-radius:6px;cursor:pointer;"
+            : "padding:0.9rem 2rem;font-size:1.1rem;font-weight:bold;color:white;background:#1a5fa8;border:none;border-radius:6px;cursor:pointer;";
+          nextPatBtn.textContent = "Next Patient →";
+
+          if (locked) {
+            const lockMsg = document.createElement("div");
+            lockMsg.id = "lockMsg";
+            lockMsg.style.cssText = "display:none;margin-top:0.8rem;font-size:0.82rem;color:#ff9999;max-width:460px;background:rgba(200,0,0,0.12);border:1px solid rgba(200,0,0,0.3);border-radius:6px;padding:0.6rem 0.9rem;";
+            lockMsg.textContent = "Incoming patient unavailable. Jordan R. did not survive. Successfully stabilize the current patient to receive the next assignment.";
+            nextPatBtn.addEventListener("click", () => {
+              lockMsg.style.display = lockMsg.style.display === "none" ? "block" : "none";
+            });
+            btnRow.appendChild(restartButton);
+            btnRow.appendChild(nextPatBtn);
+            endScreen.appendChild(endTitle);
+            endScreen.appendChild(endMessage);
+            endScreen.appendChild(debrief);
+            endScreen.appendChild(btnRow);
+            endScreen.appendChild(lockMsg);
+          } else {
+            nextPatBtn.addEventListener("click", () => {
+              document.body.removeChild(endScreen);
+              startPatient2();
+            });
+            btnRow.appendChild(restartButton);
+            btnRow.appendChild(nextPatBtn);
+            endScreen.appendChild(endTitle);
+            endScreen.appendChild(endMessage);
+            endScreen.appendChild(debrief);
+            endScreen.appendChild(btnRow);
+          }
+        } else {
+          // Patient 2 — just restart
+          btnRow.appendChild(restartButton);
+          endScreen.appendChild(endTitle);
+          endScreen.appendChild(endMessage);
+          endScreen.appendChild(debrief);
+          endScreen.appendChild(btnRow);
+        }
+
         document.body.appendChild(endScreen);
       }
 
