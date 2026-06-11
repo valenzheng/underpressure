@@ -20,7 +20,7 @@
       .cover-screen {
         position: fixed;
         top: 0;
-        left: 0;
+        left: 0;     
         width: 100vw;
         height: 100vh;
         background-image: url("cover.png");
@@ -193,6 +193,7 @@
         border-radius: 5px;
         margin-bottom: 1.5rem;
         border-left: 3px solid #ff4444;
+        display: none;  /* hidden — info lives in patient chart overlay */
       }
 
       .choice-option {
@@ -316,11 +317,11 @@
       /* Vitals trend graph */
       #vitalsTrendCanvas {
         position: absolute;
-        bottom: 0px;
-        right: 0px;
+        bottom: 12px;
+        right: 12px;
         background: rgba(0,0,0,0.82);
         border: 2px solid #00ff9d;
-        border-radius: 10px 0 0 0;
+        border-radius: 10px;
         z-index: 900;
         width: 280px;
         height: 100px;
@@ -361,6 +362,7 @@
         color: #4488ff;
         margin: 0 0 0.8rem;
         text-transform: uppercase;
+        padding-right: 2rem;  /* space for ✕ button */
       }
       #patientChartOverlay .chart-row {
         display: flex;
@@ -369,8 +371,8 @@
         padding: 0.35rem 0;
         font-size: 0.82rem;
       }
-      #patientChartOverlay .chart-row .label { color: #778899; }
-      #patientChartOverlay .chart-row .value { color: #eef4ff; font-weight: bold; }
+      #patientChartOverlay .chart-row .label { color: #778899; flex-shrink: 0; width: 120px; }
+      #patientChartOverlay .chart-row .value { color: #eef4ff; font-weight: bold; text-align: left; flex: 1; }
       #chartCloseBtn {
         position: absolute;
         top: 10px;
@@ -457,12 +459,12 @@
   </head>
 
   <body>
-    <!-- Cover Screen -->
+    <!-- Cover Screen (Visible on Load) -->
     <div class="cover-screen" id="cover-screen">
       <button class="play-button" id="play-button">Play</button>
     </div>
 
-    <!-- Loading Screen, Hospital Monitor Style -->
+    <!-- Loading Screen (Hospital Monitor Style) -->
     <div class="loading-screen" id="loading-screen">
       <div class="status-container">
         <div class="ecg-container" id="ecg-container"></div>
@@ -507,6 +509,16 @@
           PATIENT ARRIVAL IMMINENT — STANDBY.
         </div>
 
+      </div>
+    </div>
+
+    <!-- Mini Loading Screen (restart / patient 2) -->
+    <div id="miniLoadingScreen" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;color:#00ff9d;font-family:'Courier New',monospace;z-index:9998;flex-direction:column;justify-content:center;align-items:center;">
+      <div style="border:1px solid rgba(0,255,157,0.3);padding:2rem;border-radius:5px;width:80%;max-width:500px;text-align:center;position:relative;">
+        <div id="miniEcgContainer" style="position:absolute;top:5px;left:50%;transform:translateX(-50%);width:200px;height:50px;pointer-events:none;"></div>
+        <div style="font-size:1.1rem;margin-top:2.5rem;margin-bottom:1rem;opacity:0.8;letter-spacing:2px;">REINITIALIZING SYSTEM</div>
+        <div id="miniLoadingMsg" style="font-size:1rem;min-height:1.5rem;color:#00ff9d;"></div>
+        <div id="miniFinalMsg" style="font-size:1.1rem;font-weight:bold;color:#ff4444;margin-top:1rem;display:none;"></div>
       </div>
     </div>
 
@@ -844,6 +856,7 @@
         initECG();
         animateECG();
         startLoadingSequence();
+        // Start 3D loading NOW during the loading screen
         initGame();
       });
 
@@ -922,7 +935,7 @@
         currentScenario: 1,
         isPatientStable: false,
         lastVitalUpdate: Date.now(),
-        vitalDropInterval: 15000,  // 15s between automatic drops 
+        vitalDropInterval: 15000,  // 15s between automatic drops — enough time to read questions
         ivPenaltyActive: false,
         penaltyQuestionCount: 0,
         firstQuestionTriggered: false,
@@ -950,7 +963,7 @@
       const condBpUI = document.getElementById("condBp");
       const condRespUI = document.getElementById("condResp");
 
-      // Situation 1
+      // Scenarios
       const scenarios = [
         {
           prompt: "What is the FIRST priority intervention?",
@@ -1106,7 +1119,9 @@
         },
       ];
 
-      // Situation 2
+      // ─────────────────────────────────────────────────────────
+      // PATIENT 2 — MARIA LOPEZ (Septic Shock)
+      // ─────────────────────────────────────────────────────────
       const scenarios2 = [
         {
           prompt: "What finding is MOST concerning right now?",
@@ -1276,7 +1291,9 @@
         }
       };
 
-      // VITALS TREND GRAPH
+      // ═══════════════════════════════════════════════════════
+      // FEATURE 1 — VITALS TREND GRAPH (live pulse sparkline)
+      // ═══════════════════════════════════════════════════════
       const trendCanvas = document.getElementById("vitalsTrendCanvas");
       const trendCtx = trendCanvas.getContext("2d");
       const TREND_MAX = 60;      // data points to keep
@@ -1331,7 +1348,9 @@
         trendCtx.fillText(Math.round(vitals.pulse) + " bpm", w - 50, 10);
       }
 
-      // PARTICLE SYSTEM (blood/IV drip)
+      // ═══════════════════════════════════════════════════
+      // FEATURE 4 — PARTICLE SYSTEM (blood/IV drip)
+      // ═══════════════════════════════════════════════════
       const pCanvas = document.getElementById("particleCanvas");
       const pCtx = pCanvas.getContext("2d");
       let particles = [];
@@ -1395,7 +1414,9 @@
         pCtx.globalAlpha = 1;
       }
 
-      // wrong answer sound effect
+      // ══════════════════════════════════════════════════
+      // FEATURE 5 — WRONG ANSWER SOUND CUE
+      // ══════════════════════════════════════════════════
       function playWrongBuzz() {
         try {
           const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1411,7 +1432,114 @@
         } catch(e) {}
       }
 
+      // ─────────────────────────────────────────────────────────
+      // MINI LOADING SCREEN (restart / patient 2 transitions)
+      // ─────────────────────────────────────────────────────────
+      const miniLoadingScreen = document.getElementById("miniLoadingScreen");
+      const miniLoadingMsg = document.getElementById("miniLoadingMsg");
+      const miniFinalMsg = document.getElementById("miniFinalMsg");
+
+      const MINI_PHRASES = {
+        restart1: [
+          "RELOADING TRAUMA BAY...",
+          "RESETTING PATIENT VITALS...",
+          "STANDING BY FOR JORDAN R..."
+        ],
+        restart2: [
+          "RELOADING OBSERVATION ROOM...",
+          "RESETTING SEPSIS PROTOCOL...",
+          "STANDING BY FOR MARIA LOPEZ..."
+        ],
+        patient2: [
+          "INCOMING PATIENT ALERT...",
+          "LOADING PATIENT RECORDS...",
+          "PREPARING OBSERVATION BAY..."
+        ],
+      };
+      const MINI_FINAL = {
+        restart1: "PATIENT ARRIVAL IMMINENT — STANDBY.",
+        restart2: "PATIENT ARRIVAL IMMINENT — STANDBY.",
+        patient2: "NEW PATIENT EN ROUTE — PREPARE BAY.",
+      };
+
+      let miniEcgRenderer = null;
+
+      function initMiniECG() {
+        const container = document.getElementById("miniEcgContainer");
+        if (!container || miniEcgRenderer) return;
+        const mScene = new THREE.Scene();
+        const mCam = new THREE.OrthographicCamera(-2.5, 2.5, 0.8, -0.2, 0.1, 10);
+        mCam.position.z = 5;
+        miniEcgRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        miniEcgRenderer.setSize(200, 50);
+        container.appendChild(miniEcgRenderer.domElement);
+        const pts = [];
+        for (let i = 0; i < 100; i++) pts.push(new THREE.Vector3(-2.5 + i * (5/99), 0, 0));
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const mat = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+        const line = new THREE.Line(geo, mat);
+        line.scale.y = 0.4; line.position.y = 0.1;
+        mScene.add(line);
+        let wIdx = 0;
+        function tick() {
+          if (!miniLoadingScreen || miniLoadingScreen.style.display === "none") return;
+          requestAnimationFrame(tick);
+          const pos = geo.attributes.position;
+          for (let i = 0; i < 99; i++) pos.setY(i, pos.getY(i+1));
+          pos.setY(99, ecgWave[wIdx]); wIdx = (wIdx+1) % ecgWave.length;
+          pos.needsUpdate = true;
+          miniEcgRenderer.render(mScene, mCam);
+        }
+        tick();
+      }
+
+      function showMiniLoading(type, onDone) {
+        const phrases = MINI_PHRASES[type] || MINI_PHRASES.restart1;
+        const finalText = MINI_FINAL[type] || MINI_FINAL.restart1;
+
+        // Remove any stray home buttons
+        document.querySelectorAll("button").forEach(b => {
+          if (b.textContent.trim().startsWith("⌂")) b.remove();
+        });
+
+        // The canvas must stay rendered — show mini screen ON TOP via fixed overlay
+        // gameContent stays in DOM but hidden behind the mini screen
+        gameContent.style.visibility = "hidden";
+        miniLoadingScreen.style.display = "flex";
+        miniLoadingMsg.textContent = "";
+        miniFinalMsg.style.display = "none";
+        miniFinalMsg.textContent = finalText;
+
+        // Start heartbeat
+        audioElements.loadingHeartbeat.currentTime = 0;
+        audioElements.loadingHeartbeat.volume = 0.3;
+        audioElements.loadingHeartbeat.play().catch(() => {});
+
+        initMiniECG();
+
+        let i = 0;
+        function showNext() {
+          if (i >= phrases.length) {
+            miniFinalMsg.style.display = "block";
+            setTimeout(() => {
+              audioElements.loadingHeartbeat.pause();
+              audioElements.loadingHeartbeat.currentTime = 0;
+              miniLoadingScreen.style.display = "none";
+              gameContent.style.visibility = "visible";
+              onDone();
+            }, 1400);
+            return;
+          }
+          miniLoadingMsg.textContent = phrases[i];
+          i++;
+          setTimeout(showNext, 900);
+        }
+        showNext();
+      }
+
+      // ─────────────────────────────────────────────────────────
       // PATIENT CHART OVERLAY LOGIC
+      // ─────────────────────────────────────────────────────────
       const chartOverlay = document.getElementById("patientChartOverlay");
       const chartBtn = document.getElementById("chartBtn");
       const chartCloseBtn = document.getElementById("chartCloseBtn");
@@ -1531,7 +1659,7 @@
         vrBtn.style.zIndex = "100000";
         document.body.appendChild(vrBtn);
 
-        // POST-PROCESSING SETUP 
+        // --- POST-PROCESSING SETUP ---
         const vignetteShader = {
           uniforms: {
             tDiffuse: { value: null },
@@ -1567,7 +1695,7 @@
         vignettePass = new ShaderPass(vignetteShader);
         vignettePass.renderToScreen = true;
         composer.addPass(vignettePass);
-        // END POST-PROCESSING
+        // --- END POST-PROCESSING ---
 
         renderer.xr.addEventListener("sessionstart", () => {
           pendingRecenter = true;
@@ -1648,7 +1776,7 @@
         directionalLight.shadow.camera.near = 0.5;
         directionalLight.shadow.camera.far = 30;
 
-        // Overhead ceiling fill
+        // Overhead ceiling fill — simulates fluorescent banks
         const ceilingLight1 = new THREE.PointLight(0xe8f4ff, 3.0, 12);
         ceilingLight1.position.set(0, 5, 1);
         const ceilingLight2 = new THREE.PointLight(0xe8f4ff, 2.5, 12);
@@ -2232,11 +2360,26 @@
             patient2Model = gltf.scene;
             // patient2.glb is standing — lay her down on the bed
             // Scale to match patient1, rotate to lie flat (X = -PI/2 lays model on back),
+            // then rotate Y to face same direction as patient1
+            /*
+            patientModel.scale.set(0.022, 0.022, 0.022);
+            patientModel.position.set(1.75, 0.75, 1.3);
+            patientModel.rotation.y = Math.PI;
+            patientModel.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+            scene.add(patientModel);
+            controls.target.copy(patientModel.position);
+            loadPatient2(startGame);
+          },
+          (xhr) => console.log(`Patient 1: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`),
+          (error) => alert("Failed to load patient.glb")
+        );
+      }*/
+          
             patient2Model.scale.set(0.022, 0.022, 0.022);
             patient2Model.position.set(1.75, 0.75, 1.3);
             patient2Model.rotation.order = "YXZ";
-            patient2Model.rotation.x = -Math.PI / 2;   // lay flat on back
-            patient2Model.rotation.y = Math.PI;          // face same way as patient1
+            patientModel.rotation.y = Math.PI;
+            patientModel.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });way as patient1
             patient2Model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
             patient2Model.visible = false;  // hidden until patient 2 case
             scene.add(patient2Model);
@@ -2359,6 +2502,10 @@
         });
 
         updateVitalUI();
+
+        // Show chart button only from Q2 onward (index >= 1)
+        const chartBtnEl = document.getElementById("chartBtn");
+        if (chartBtnEl) chartBtnEl.style.display = index >= 1 ? "inline-block" : "none";
 
         if (renderer.xr.isPresenting) {
           updateVRMenu(index);
@@ -2528,6 +2675,7 @@
       }
 
       function updateVitals() {
+        // Don't tick vitals before the game starts, during feedback reading, or after sim ends
         if (!gameState.firstQuestionTriggered) return;
         if (gameState.simEnded) return;
         if (feedbackPanel.style.display === "block") {
@@ -2539,7 +2687,7 @@
 
         const now = Date.now();
         const interval = gameState.ivPenaltyActive
-          ? gameState.vitalDropInterval / 2 
+          ? gameState.vitalDropInterval / 2  // 7.5s under penalty
           : gameState.vitalDropInterval;
 
         if (now - gameState.lastVitalUpdate > interval) {
@@ -2562,6 +2710,62 @@
 
           gameState.lastVitalUpdate = now;
         }
+      }
+
+      function restartPatient1() {
+        // Reset vitals to Jordan R.'s initial state
+        vitals.pulse = 130;
+        vitals.bpSystolic = 88;
+        vitals.bpDiastolic = 60;
+        vitals.respirations = 28;
+        vitals.consecutiveWrongAnswers = 0;
+        vitals.lastPulseChange = Date.now();
+
+        currentPatient = 1;
+        gameState.simEnded = false;
+        gameState.currentScenario = 1;
+        gameState.ivPenaltyActive = false;
+        gameState.penaltyQuestionCount = 0;
+        gameState.firstQuestionTriggered = false;
+        gameState.lastVitalUpdate = Date.now();
+        gameState.flickerActive = false;
+        gameState.flickerTimer = 0;
+
+        window._gameScore = { correct: 0, wrong: 0, missed: [], startTime: Date.now(), endTime: null };
+
+        // Show patient 1, hide patient 2
+        if (patientModel) patientModel.visible = true;
+        if (patient2Model) patient2Model.visible = false;
+
+        // Reset trend canvas
+        const tc = document.getElementById("vitalsTrendCanvas");
+        if (tc) tc.style.display = "block";
+        trendHistory.length = 0;
+
+        // Reset patientCondition back to Jordan R.
+        document.getElementById("patientCondition").innerHTML = `
+          <p><strong>Patient: Jordan R., 28</strong></p>
+          <p><strong>Mechanism of Injury:</strong> Motorcycle crash</p>
+          <p><strong>Current Status:</strong> Pale, cool, clammy skin | Rigid abdomen on palpation</p>
+          <p><strong>Vitals:</strong> Pulse <span id="condPulse">130</span> (weak/thready) | BP <span id="condBp">88/60</span> | Respirations <span id="condResp">28</span>/min</p>
+          <p><strong>Complaint:</strong> Severe abdominal pain</p>
+        `;
+
+        hoverTooltip.textContent = "Click to assess patient";
+
+        // Reset camera to starting position
+        camera.position.copy(gameState.originalCameraPos);
+        controls.target.set(1.75, 0.75, 1.3);
+        controls.update();
+
+        // Resume audio
+        audioElements.background.play().catch(() => {});
+        audioElements.heavyBreathing.volume = 0.8;
+        audioElements.heavyBreathing.currentTime = 0;
+        audioElements.heavyBreathing.play().catch(() => {});
+
+        updateVitalUI();
+        playBeatSoundByColor("pulse-yellow");
       }
 
       function startPatient2() {
@@ -2609,18 +2813,27 @@
           <p><strong>Status:</strong> Warm flushed skin, confused, lethargic</p>
         `;
 
-        // Update hover tooltip
         hoverTooltip.textContent = "Click to assess patient";
 
-        // Play appropriate beat sound
+        // Reset camera to starting position so player sees the patient zoomed out
+        camera.position.copy(gameState.originalCameraPos);
+        controls.target.set(1.75, 0.75, 1.3);
+        controls.update();
+
+        // Reset trend canvas
+        const tc2 = document.getElementById("vitalsTrendCanvas");
+        if (tc2) tc2.style.display = "block";
+        trendHistory.length = 0;
+
+        // Resume audio
+        audioElements.background.play().catch(() => {});
+        audioElements.heavyBreathing.volume = 0.8;
+        audioElements.heavyBreathing.currentTime = 0;
+        audioElements.heavyBreathing.play().catch(() => {});
+
         updateVitalUI();
         playBeatSoundByColor("pulse-yellow");
-
-        // Show the scenario directly (patient is already in scene)
-        setTimeout(() => {
-          showScenario(0);
-          gameState.firstQuestionTriggered = true;
-        }, 800);
+        // Player must click patient to begin — same as patient 1 start
       }
 
       function endSimulation(isSuccess) {
@@ -2667,6 +2880,22 @@
           if (vrMenuGroup) vrMenuGroup.visible = false;
           if (vrFeedbackGroup) vrFeedbackGroup.visible = false;
         }
+
+        // Home button (top-right of end screen)
+        const homeBtn = document.createElement("button");
+        homeBtn.textContent = "⌂ Home";
+        homeBtn.style.cssText = "position:fixed;top:18px;right:18px;z-index:10000;padding:0.5rem 1.1rem;font-size:0.9rem;font-weight:bold;color:#ccc;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;font-family:Arial,sans-serif;transition:background 0.2s;";
+        homeBtn.addEventListener("mouseenter", () => homeBtn.style.background = "rgba(255,255,255,0.16)");
+        homeBtn.addEventListener("mouseleave", () => homeBtn.style.background = "rgba(255,255,255,0.08)");
+        homeBtn.addEventListener("click", () => {
+          audioElements.flatline.pause();
+          stopAllBeatSounds();
+          audioElements.background.pause();
+          // Show cover screen, hide everything else
+          document.body.removeChild(endScreen);
+          gameContent.style.display = "none";
+          coverScreen.style.display = "flex";
+        });
 
         const endScreen = document.createElement("div");
         endScreen.style.position = "fixed";
@@ -2761,7 +2990,15 @@
         restartButton.textContent = "Restart Case";
         restartButton.addEventListener("click", () => {
           audioElements.flatline.pause();
-          location.reload();
+          document.body.removeChild(endScreen);
+          const miniType = currentPatient === 2 ? "restart2" : "restart1";
+          showMiniLoading(miniType, () => {
+            if (currentPatient === 2) {
+              startPatient2();
+            } else {
+              restartPatient1();
+            }
+          });
         });
 
         // Next Patient button — only shown for patient 1 end screens
@@ -2791,7 +3028,7 @@
           } else {
             nextPatBtn.addEventListener("click", () => {
               document.body.removeChild(endScreen);
-              startPatient2();
+              showMiniLoading("patient2", () => { startPatient2(); });
             });
             btnRow.appendChild(restartButton);
             btnRow.appendChild(nextPatBtn);
@@ -2810,6 +3047,12 @@
         }
 
         document.body.appendChild(endScreen);
+        document.body.appendChild(homeBtn);  // fixed position, append to body
+        // Remove homeBtn when end screen is removed
+        const _origHomeBtnClick = homeBtn.onclick;
+        const _removeHomeBtn = () => { if (homeBtn.parentNode) homeBtn.parentNode.removeChild(homeBtn); };
+        restartButton.addEventListener("click", _removeHomeBtn, { once: true });
+        homeBtn.addEventListener("click", _removeHomeBtn, { once: true });
       }
 
       const style = document.createElement("style");
@@ -2843,7 +3086,7 @@
         const inCritical_rl = pulse_rl > 140 || pulse_rl < 80;
         const inWarning_rl = !inCritical_rl && (pulse_rl > 120 || pulse_rl < 100);
 
-        // DYNAMIC LIGHTING based on patient state
+        // --- DYNAMIC LIGHTING based on patient state ---
         if (inCritical_rl) {
           // Emergency red light pulses fast with heartbeat
           emergencyLights.intensity = 0.6 + Math.sin(now_rl * 0.008) * 0.4;
