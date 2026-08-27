@@ -4,159 +4,2151 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ER Simulation: Nursing Cave 3D</title>
-    <link rel="stylesheet" href="styles.css" />
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        overflow: hidden;
+        background-color: #000;
+      }
+
+      .cover-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-image: url("cover.png");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        padding-bottom: 10vh;
+        z-index: 9999;
+      }
+
+      .play-button {
+        padding: 1rem 3rem;
+        font-size: 2rem;
+        font-weight: bold;
+        color: white;
+        background-color: #ff4444;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .play-button:hover {
+        background-color: #ff2222;
+        transform: translateY(-2px);
+      }
+
+      .play-button:active {
+        transform: translateY(1px);
+      }
+
+      /* --- HOSPITAL MONITOR LOADING SCREEN --- */
+      .loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #000;
+        color: #00ff9d;
+        font-family: "Courier New", monospace;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9998;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+      }
+
+      .loading-screen.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .status-container {
+        width: 80%;
+        max-width: 600px;
+        text-align: center;
+        border: 1px solid rgba(0, 255, 157, 0.3);
+        padding: 2rem;
+        border-radius: 5px;
+        position: relative;
+      }
+
+      .ecg-container {
+        position: absolute;
+        top: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 200px;
+        height: 50px;
+        z-index: 20;
+        pointer-events: none;
+      }
+
+      .system-init {
+        font-size: 1.2rem;
+        margin-top: 2rem;
+        margin-bottom: 2rem;
+        opacity: 0;
+        animation: fade-in 1s forwards;
+      }
+
+      .message-line {
+        font-size: 1.1rem;
+        height: 1.5rem;
+        overflow: hidden;
+        position: relative;
+      }
+
+      .typed-message {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+        overflow: hidden;
+        border-right: 2px solid #00ff9d;
+        opacity: 0;
+        display: inline-block;
+        width: 0ch;
+      }
+
+      .typed-message.active {
+        opacity: 1;
+        animation: typing 3s steps(var(--chars), end),
+          cursor-blink 0.75s infinite;
+      }
+
+      .typed-message.hidden {
+        opacity: 0;
+        border-right: none;
+      }
+
+      .final-message {
+        font-size: 1.3rem;
+        font-weight: bold;
+        color: #ff4444;
+        margin-top: 2rem;
+        opacity: 0;
+        white-space: nowrap;
+      }
+
+      .final-message.active {
+        animation: fade-in 1s forwards, pulse 1s infinite alternate;
+      }
+
+      /* Game Content */
+      #game-content {
+        display: none;
+      }
+
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        cursor: crosshair;
+      }
+
+      .choice-window {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 2rem;
+        border-radius: 10px;
+        font-family: Arial, sans-serif;
+        z-index: 1000;
+        max-width: 600px;
+        display: none;
+      }
+
+      .choice-window h3 {
+        margin-top: 0;
+        color: #ff4444;
+      }
+
+      .choice-window .patient-condition {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 1rem;
+        border-radius: 5px;
+        margin-bottom: 1.5rem;
+        border-left: 3px solid #ff4444;
+      }
+
+      .choice-option {
+        padding: 1rem;
+        margin: 0.5rem 0;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid #ff4444;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .choice-option:hover {
+        background: rgba(255, 68, 68, 0.3);
+      }
+
+      .hover-tooltip {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-family: Arial, sans-serif;
+        font-size: 0.9rem;
+        pointer-events: none;
+        z-index: 999;
+        display: none;
+      }
+
+      .pulse-monitor {
+        position: absolute;
+        top: 0px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.85);
+        border: 2px solid #ff4444;
+        border-radius: 10px;
+        padding: 0.5rem;
+        font-family: "Courier New", monospace;
+        color: white;
+        z-index: 900;
+        min-width: 135px;
+        text-align: center;
+      }
+
+      .pulse-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 10px 0;
+        animation: pulse-flash 1s infinite;
+      }
+
+      .pulse-green {
+        color: #00ff9d;
+      } /* Stable: 100-120 BPM */
+
+      .pulse-yellow {
+        color: #ffff00;
+      } /* Instable: 120-140 BPM or rapidly falling */
+
+      .pulse-red {
+        color: #ff4444;
+      } /* Critical: <80 BPM and dropping */
+
+      .pulse-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+
+      .feedback-panel {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.95);
+        color: white;
+        padding: 1.5rem 2rem;
+        border-radius: 10px;
+        font-family: Arial, sans-serif;
+        z-index: 1001;
+        max-width: 500px;
+        text-align: center;
+        display: none;
+        border: 2px solid;
+      }
+
+      .feedback-correct {
+        border-color: #00ff9d;
+      }
+
+      .feedback-incorrect {
+        border-color: #ff4444;
+      }
+
+      .feedback-panel h4 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+      }
+
+      .feedback-panel p {
+        margin-bottom: 1.5rem;
+        line-height: 1.5;
+      }
+
+      .next-button {
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+        font-weight: bold;
+        color: white;
+        background-color: #ff4444;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .next-button:hover {
+        background-color: #ff2222;
+      }
+
+      @keyframes pulse-flash {
+        0% {
+          opacity: 0.4;
+          transform: scale(0.95);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.05);
+        }
+        100% {
+          opacity: 0.4;
+          transform: scale(0.95);
+        }
+      }
+
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes typing {
+        from {
+          width: 0ch;
+        }
+        to {
+          width: calc(var(--chars) * 1ch);
+        }
+      }
+
+      @keyframes cursor-blink {
+        from,
+        to {
+          border-color: transparent;
+        }
+        50% {
+          border-color: #00ff9d;
+        }
+      }
+
+      @keyframes pulse {
+        from {
+          opacity: 0.7;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+    </style>
   </head>
 
   <body>
-
-    <!-- ── Cover Screen ─────────────────────────────────── -->
-    <!-- ── How to Play ─────────────────────────────── -->
-    <div id="howToPlayModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:10002;justify-content:center;align-items:center;background:rgba(0,0,0,0.75);">
-      <div style="background:#0a0f1e;border:1px solid #444;border-radius:12px;padding:2rem 2.4rem;max-width:520px;width:90%;color:#eee;font-family:Arial,sans-serif;position:relative;max-height:85vh;overflow-y:auto;">
-        <button id="howToPlayClose" style="position:absolute;top:12px;right:16px;background:none;border:none;color:#aaa;font-size:1.3rem;cursor:pointer;line-height:1;" title="Close">✕</button>
-        <h2 style="color:#ff4444;margin:0 0 1.2rem;font-size:1.3rem;letter-spacing:1px;text-transform:uppercase;">How to Play</h2>
-
-        <p style="color:#cc3333;font-weight:bold;margin:0 0 0.3rem;font-size:0.85rem;text-transform:uppercase;letter-spacing:1px;">Objective</p>
-        <p style="margin:0 0 1.2rem;line-height:1.6;font-size:0.92rem;color:#ccc;">Make clinical decisions to stabilize your patient and prevent deterioration.</p>
-
-        <p style="color:#cc3333;font-weight:bold;margin:0 0 0.3rem;font-size:0.85rem;text-transform:uppercase;letter-spacing:1px;">Controls</p>
-        <ul style="margin:0 0 1.2rem;padding-left:1.2rem;line-height:1.8;font-size:0.92rem;color:#ccc;">
-          <li>Click on the patient to begin the assessment.</li>
-          <li>Read each scenario carefully before deciding.</li>
-          <li>Select the intervention you believe is most appropriate.</li>
-        </ul>
-
-        <p style="color:#cc3333;font-weight:bold;margin:0 0 0.3rem;font-size:0.85rem;text-transform:uppercase;letter-spacing:1px;">Monitor the Patient</p>
-        <ul style="margin:0 0 1.2rem;padding-left:1.2rem;line-height:1.8;font-size:0.92rem;color:#ccc;">
-          <li>Watch heart rate and blood pressure closely.</li>
-          <li>Vital signs change based on your decisions.</li>
-          <li>Deteriorating vitals indicate increasing danger.</li>
-        </ul>
-
-        <p style="color:#cc3333;font-weight:bold;margin:0 0 0.3rem;font-size:0.85rem;text-transform:uppercase;letter-spacing:1px;">Important</p>
-        <ul style="margin:0 0 1.4rem;padding-left:1.2rem;line-height:1.8;font-size:0.92rem;color:#ccc;">
-          <li>Incorrect decisions can worsen the patient's condition.</li>
-          <li>Multiple mistakes may lead to critical outcomes.</li>
-          <li>Not every mistake is immediately fatal.</li>
-          <li>Use clinical judgment and prioritize patient safety.</li>
-        </ul>
-
-        <p style="text-align:center;color:#888;font-style:italic;font-size:0.88rem;">Good luck.</p>
-      </div>
-    </div>
-
-    <!-- ── Cover Screen ─────────────────────────────────── -->
+    <!-- Cover Screen (Visible on Load) -->
     <div class="cover-screen" id="cover-screen">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:0.75rem;">
-        <button class="play-button" id="play-button">Start Simulation</button>
-        <span id="howToPlayLink" style="color:white;font-family:Arial,sans-serif;font-size:0.95rem;opacity:0.8;cursor:pointer;text-decoration:none;letter-spacing:0.5px;">ⓘ How to Play</span>
-      </div>
+      <button class="play-button" id="play-button">Play</button>
     </div>
 
-    <!-- ── Main Loading Screen (Hospital Monitor Style) ─── -->
+    <!-- Loading Screen (Hospital Monitor Style) -->
     <div class="loading-screen" id="loading-screen">
       <div class="status-container">
         <div class="ecg-container" id="ecg-container"></div>
+
         <div class="system-init">SYSTEM INITIATING</div>
+
         <div class="message-line">
-          <div class="typed-message" data-text="LOADING ER ENVIRONMENT..."             data-delay="1500">LOADING ER ENVIRONMENT...</div>
-          <div class="typed-message" data-text="CALIBRATING VITAL SIGN MONITORS..."    data-delay="5500">CALIBRATING VITAL SIGN MONITORS...</div>
-          <div class="typed-message" data-text="SYNCING PATIENT BIOFEEDBACK DATA..."   data-delay="10500">SYNCING PATIENT BIOFEEDBACK DATA...</div>
-          <div class="typed-message" data-text="PREPPING TRAUMA BAY..."                data-delay="14500">PREPPING TRAUMA BAY...</div>
+          <div
+            class="typed-message"
+            data-text="LOADING ER ENVIRONMENT..."
+            data-delay="1500"
+          >
+            LOADING ER ENVIRONMENT...
+          </div>
+
+          <div
+            class="typed-message"
+            data-text="CALIBRATING VITAL SIGN MONITORS..."
+            data-delay="5500"
+          >
+            CALIBRATING VITAL SIGN MONITORS...
+          </div>
+
+          <div
+            class="typed-message"
+            data-text="SYNCING PATIENT BIOFEEDBACK DATA..."
+            data-delay="10500"
+          >
+            SYNCING PATIENT BIOFEEDBACK DATA...
+          </div>
+
+          <div
+            class="typed-message"
+            data-text="PREPPING TRAUMA BAY..."
+            data-delay="14500"
+          >
+            PREPPING TRAUMA BAY...
+          </div>
+
         </div>
-        <div class="final-message" id="final-message">PATIENT ARRIVAL IMMINENT — STANDBY.</div>
+        <div class="final-message" id="final-message">
+          PATIENT ARRIVAL IMMINENT — STANDBY.
+        </div>
+
       </div>
     </div>
 
-    <!-- ── Mini Loading Screen (restart / patient 2) ────── -->
-    <div id="miniLoadingScreen" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#000;color:#00ff9d;font-family:'Courier New',monospace;z-index:9998;flex-direction:column;justify-content:center;align-items:center;">
-      <div style="border:1px solid rgba(0,255,157,0.3);padding:2rem;border-radius:5px;width:80%;max-width:500px;text-align:center;position:relative;">
-        <div id="miniEcgContainer" style="position:absolute;top:5px;left:50%;transform:translateX(-50%);width:200px;height:50px;pointer-events:none;"></div>
-        <div style="font-size:1.1rem;margin-top:2.5rem;margin-bottom:1rem;opacity:0.8;letter-spacing:2px;">REINITIALIZING SYSTEM</div>
-        <div id="miniLoadingMsg" style="font-size:1rem;min-height:1.5rem;color:#00ff9d;"></div>
-        <div id="miniFinalMsg"   style="font-size:1.1rem;font-weight:bold;color:#ff4444;margin-top:1rem;display:none;"></div>
-      </div>
-    </div>
-
-    <!-- ── Game Content ──────────────────────────────────── -->
+    <!-- Game Content-->
     <div id="game-content">
 
-      <!-- Vitals Trend Graph -->
-      <canvas id="vitalsTrendCanvas" width="280" height="100"></canvas>
-
-      <!-- Particle Canvas (blood / IV drip effects) -->
-      <canvas id="particleCanvas"></canvas>
-
-      <!-- Pulse Monitor -->
+      <!-- Pulse Monitor UI -->
       <div class="pulse-monitor">
         <div class="pulse-label">Patient's Pulse (BPM)</div>
         <div class="pulse-value pulse-yellow" id="pulseValue">130</div>
-        <div class="pulse-label" style="margin-top:4px;">BP (mmHg)</div>
-        <div id="monitorBp"   style="font-size:1.1rem;font-weight:bold;color:#ffaa44;margin:4px 0;letter-spacing:1px;">88/60</div>
-        <div class="pulse-label" style="margin-top:2px;">RESP /min</div>
-        <div id="monitorResp" style="font-size:1rem;font-weight:bold;color:#aaddff;margin:4px 0;">28</div>
-      </div>
-
-      <!-- Patient Chart Overlay -->
-      <div id="patientChartOverlay">
-        <button id="chartCloseBtn" title="Close chart">✕</button>
-        <h3>📋 Patient Chart</h3>
-        <div id="chartContent"></div>
       </div>
 
       <!-- Choice Window -->
       <div class="choice-window" id="choiceWindow">
         <h3 id="choicePrompt">Patient Assessment</h3>
+
         <div class="patient-condition" id="patientCondition">
           <p><strong>Patient: Jordan R., 28</strong></p>
           <p><strong>Mechanism of Injury:</strong> Motorcycle crash</p>
-          <p><strong>Current Status:</strong> Pale, cool, clammy skin | Rigid abdomen on palpation</p>
-          <p><strong>Vitals:</strong> Pulse <span id="condPulse">130</span> (weak/thready) | BP <span id="condBp">88/60</span> | Respirations <span id="condResp">28</span>/min</p>
+          <p>
+            <strong>Current Status:</strong> Pale, cool, clammy skin | Rigid
+            abdomen on palpation
+          </p>
+          <p>
+            <strong>Vitals:</strong> Pulse
+            <span id="condPulse">130</span> (weak/thready) | BP
+            <span id="condBp">88/60</span> | Respirations
+            <span id="condResp">28</span>/min
+          </p>
           <p><strong>Complaint:</strong> Severe abdominal pain</p>
         </div>
         <div class="choice-options" id="choiceOptions"></div>
-        <button id="chartBtn">📋 PATIENT CHART</button>
       </div>
 
       <!-- Feedback Panel -->
       <div class="feedback-panel" id="feedbackPanel">
         <h4 id="feedbackTitle"></h4>
         <p id="feedbackMessage"></p>
-        <p id="feedbackRationale" style="font-size:0.85rem;color:#aad4ff;background:rgba(0,100,200,0.15);border-left:3px solid #4488ff;padding:0.6rem 0.8rem;border-radius:4px;margin-bottom:1.2rem;line-height:1.5;text-align:left;"></p>
         <button class="next-button" id="nextButton">Continue</button>
       </div>
 
       <!-- Hover Tooltip -->
       <div class="hover-tooltip" id="hoverTooltip">Click to assess patient</div>
 
-    </div><!-- /game-content -->
+    </div>
 
-    <!-- ── Audio Elements ─────────────────────────────────── -->
-    <audio id="erBackground"     src="erbackground.mp3"           loop preload="auto"></audio>
-    <audio id="normalBeep"       src="heartbeat/normalbeep.mp3"   loop preload="auto"></audio>
-    <audio id="fastBeep"         src="heartbeat/fastbeep.mp3"     loop preload="auto"></audio>
-    <audio id="worseningBeep"    src="heartbeat/worseningbeep.mp3" loop preload="auto"></audio>
-    <audio id="flatlineBeep"     src="heartbeat/flatlinebeep.mp3" loop preload="auto"></audio>
-    <audio id="loadingHeartbeat" src="heartbeat/heartbeep.mp3"    loop preload="auto"></audio>
-    <audio id="heavyBreathing"   src="heavybreathing.mp3"         loop preload="auto"></audio>
+    <!-- Audio Elements -->
+    <audio
+      id="erBackground"
+      src="erbackground.mp3"
+      loop
+      preload="auto"
+    ></audio>
 
-    <!-- ── Three.js Import Map ───────────────────────────── -->
+    <audio
+      id="normalBeep"
+      src="heartbeat/normalbeep.mp3"
+      loop
+      preload="auto"
+    ></audio>
+
+    <audio
+      id="fastBeep"
+      src="heartbeat/fastbeep.mp3"
+      loop
+      preload="auto"
+    ></audio>
+
+    <audio
+      id="worseningBeep"
+      src="heartbeat/worseningbeep.mp3"
+      loop
+      preload="auto"
+    ></audio>
+
+    <audio
+      id="flatlineBeep"
+      src="heartbeat/flatlinebeep.mp3"
+      loop
+      preload="auto"
+    > </audio>
+
+    <!-- New Audio Elements Added -->
+    <audio
+      id="loadingHeartbeat"
+      src="heartbeat/heartbeep.mp3"
+      loop
+      preload="auto"
+    ></audio>
+
+    <audio
+      id="heavyBreathing"
+      src="heavybreathing.mp3"
+      loop
+      preload="auto"
+    > </audio>
+
     <script type="importmap">
       {
         "imports": {
-          "three":          "https://unpkg.com/three@0.160.0/build/three.module.js",
-          "three/addons/":  "https://unpkg.com/three@0.160.0/examples/jsm/"
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
         }
       }
     </script>
 
-    <!-- Score state (non-module, available globally) -->
-    <script>
-      window._gameScore = { correct: 0, wrong: 0, missed: [], startTime: Date.now(), endTime: null };
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+      import { VRButton } from "three/addons/webxr/VRButton.js";
+      import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
+
+      // ---------------------------
+      // AUDIO
+      // ---------------------------
+      const audioElements = {
+        background: document.getElementById("erBackground"),
+        normal: document.getElementById("normalBeep"),
+        fast: document.getElementById("fastBeep"),
+        worsening: document.getElementById("worseningBeep"),
+        flatline: document.getElementById("flatlineBeep"),
+        loadingHeartbeat: document.getElementById("loadingHeartbeat"),
+        heavyBreathing: document.getElementById("heavyBreathing")
+      };
+
+      let currentBeatSound = null;
+
+      function stopAllBeatSounds() {
+        Object.values(audioElements).forEach((sound) => {
+          if (sound !== audioElements.background && sound !== audioElements.loadingHeartbeat && sound !== audioElements.heavyBreathing) {
+            sound.pause();
+            sound.currentTime = 0;
+          }
+        });
+        currentBeatSound = null;
+      }
+
+      function playBeatSoundByColor(colorClass) {
+        stopAllBeatSounds();
+
+        switch (colorClass) {
+          case "pulse-green":
+            currentBeatSound = audioElements.normal;
+            break;
+          case "pulse-yellow":
+            currentBeatSound = audioElements.fast;
+            break;
+          case "pulse-red":
+            currentBeatSound = audioElements.worsening;
+            break;
+          default:
+            currentBeatSound = audioElements.normal;
+        }
+
+        currentBeatSound.play().catch((err) => {
+          console.log("Audio play failed (user interaction required):", err);
+          document.addEventListener(
+            "click",
+            () => {
+              currentBeatSound
+                .play()
+                .catch((err) => console.log("Audio still failed:", err));
+            },
+            { once: true }
+          );
+        });
+      }
+
+      // ---------------------------
+      // ECG WAVEFORM
+      // ---------------------------
+      let ecgScene, ecgCamera, ecgRenderer;
+      let ecgLine, ecgGeometry;
+      let rig;
+
+      let pendingRecenter = false;
+
+      const numPoints = 100;
+      const ecgWave = [
+        0, 0, 0, 0, 0.05, 0.1, 0.15, 0.05, 0, -0.15,
+        1.3, -0.5, 0.2, 0.1, 0.05, 0, 0, 0, 0, 0,
+      ];
+
+      let waveIndex = 0;
+      let frameCounter = 0;
+      const framesPerShift = 2;
+
+      function initECG() {
+        const container = document.getElementById("ecg-container");
+
+        ecgScene = new THREE.Scene();
+        ecgCamera = new THREE.OrthographicCamera(-2.5, 2.5, 0.8, -0.2, 0.1, 10);
+        ecgCamera.position.z = 5;
+
+        ecgRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        ecgRenderer.setSize(container.clientWidth, container.clientHeight);
+        ecgRenderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(ecgRenderer.domElement);
+
+        const points = [];
+        const xStart = -2.5;
+        const xEnd = 2.5;
+        const xStep = (xEnd - xStart) / (numPoints - 1);
+
+        for (let i = 0; i < numPoints; i++) {
+          points.push(new THREE.Vector3(xStart + i * xStep, 0, 0));
+        }
+
+        ecgGeometry = new THREE.BufferGeometry().setFromPoints(points);
+
+        const ecgMaterial = new THREE.LineBasicMaterial({
+          color: 0x00ff00,
+          linewidth: 2,
+        });
+
+        ecgLine = new THREE.Line(ecgGeometry, ecgMaterial);
+        ecgLine.scale.y = 0.4;
+        ecgLine.position.y = 0.1;
+        ecgScene.add(ecgLine);
+
+        window.addEventListener("resize", () => {
+          ecgRenderer.setPixelRatio(window.devicePixelRatio);
+          ecgRenderer.setSize(container.clientWidth, container.clientHeight);
+        });
+      }
+
+      function animateECG() {
+        requestAnimationFrame(animateECG);
+
+        frameCounter++;
+        if (frameCounter < framesPerShift) return;
+        frameCounter = 0;
+
+        const pos = ecgGeometry.attributes.position;
+
+        for (let i = 0; i < numPoints - 1; i++) {
+          pos.setY(i, pos.getY(i + 1));
+        }
+
+        pos.setY(numPoints - 1, ecgWave[waveIndex]);
+        waveIndex = (waveIndex + 1) % ecgWave.length;
+
+        pos.needsUpdate = true;
+        ecgRenderer.render(ecgScene, ecgCamera);
+      }
+
+      // DOM Elements for Screens
+      const coverScreen = document.getElementById("cover-screen");
+      const playButton = document.getElementById("play-button");
+      const loadingScreen = document.getElementById("loading-screen");
+      const typedMessages = document.querySelectorAll(".typed-message");
+      const finalMessage = document.getElementById("final-message");
+      const gameContent = document.getElementById("game-content");
+
+      playButton.addEventListener("click", async () => {
+        const audios = [
+          audioElements.background,
+          audioElements.normal,
+          audioElements.fast,
+          audioElements.worsening,
+          audioElements.flatline,
+          audioElements.loadingHeartbeat,
+          audioElements.heavyBreathing
+        ];
+
+        for (const a of audios) {
+          if (!a) continue;
+          a.muted = false;
+          a.volume = 0.5;
+          a.currentTime = 0;
+
+          try {
+            await a.play();
+            a.pause();
+            a.currentTime = 0;
+          } catch (e) {
+            console.log("Audio unlock failed:", e);
+          }
+        }
+
+        coverScreen.style.display = "none";
+        loadingScreen.classList.add("active");
+        
+        // Play loading heartbeat sound (loop)
+        audioElements.loadingHeartbeat.volume = 0.4;
+        audioElements.loadingHeartbeat.play().catch((err) => {
+          console.log("Loading heartbeat play failed:", err);
+        });
+
+        initECG();
+        animateECG();
+        startLoadingSequence();
+      });
+
+      function startLoadingSequence() {
+        typedMessages.forEach((message, index) => {
+          const delay = parseInt(message.dataset.delay);
+          const nextMessage = typedMessages[index + 1];
+
+          setTimeout(() => {
+            const txt = message.dataset.text || message.textContent;
+            message.textContent = txt;
+
+            message.style.setProperty("--chars", txt.length);
+            message.style.width = "0ch";
+            message.classList.remove("hidden");
+            message.classList.add("active");
+
+            setTimeout(() => {
+              message.classList.remove("active");
+              message.classList.add("hidden");
+
+              if (!nextMessage) {
+                setTimeout(() => {
+                  finalMessage.classList.add("active");
+
+                  setTimeout(() => {
+                    // Stop loading heartbeat when loading completes
+                    audioElements.loadingHeartbeat.pause();
+                    audioElements.loadingHeartbeat.currentTime = 0;
+                    
+                    loadingScreen.classList.remove("active");
+
+                    setTimeout(() => {
+                      loadingScreen.style.display = "none";
+                      gameContent.style.display = "block";
+
+                      // Play heavy breathing sound when game starts
+                      audioElements.heavyBreathing.volume = 0.8;
+                      audioElements.heavyBreathing.play().catch((err) => {
+                        console.log("Heavy breathing play failed:", err);
+                      });
+
+                      audioElements.background.play().catch((err) => {
+                        console.log("Background audio play failed:", err);
+                        document.addEventListener(
+                          "click",
+                          () => {
+                            audioElements.background
+                              .play()
+                              .catch((err) =>
+                                console.log("Background noise failed", err)
+                              );
+                          },
+                          { once: true }
+                        );
+                      });
+
+                      initGame();
+                    }, 500);
+                  }, 3000);
+                }, 500);
+              }
+            }, 4500);
+          }, delay);
+        });
+      }
+
+      // Game Variables
+      let scene, camera, renderer, controls, raycaster, mouse;
+
+      // VR controller stuff
+      const tempMatrix = new THREE.Matrix4();
+      let controller1, controller2, controllerGrip1, controllerGrip2;
+      const xrControllerModelFactory = new XRControllerModelFactory();
+
+      // VR UI Globals
+      let vrMenuGroup;
+      let vrUIButtons = [];
+      let vrPulseGroup;
+      let vrFeedbackGroup;
+      let vrFeedbackButtons = [];
+      let vrEndGroup;
+      let vrEndButtons = [];
+
+      let erRoom, patientModel;
+      let ambientLight, directionalLight, emergencyLights;
+
+      let vitals = {
+        pulse: 130,
+        bpSystolic: 88,
+        bpDiastolic: 60,
+        respirations: 28,
+        consecutiveWrongAnswers: 0,
+        lastPulseChange: Date.now(),
+      };
+
+      const PULSE_MIN = 60;
+      const PULSE_MAX = 220;
+
+      let gameState = {
+        currentScenario: 1,
+        isPatientStable: false,
+        lastVitalUpdate: Date.now(),
+        vitalDropInterval: 18000,
+        ivPenaltyActive: false,
+        penaltyQuestionCount: 0,
+        firstQuestionTriggered: false,
+        isZooming: false,
+
+        originalCameraPos: new THREE.Vector3(0, 2, -2),
+        targetCameraPos: new THREE.Vector3(0.5, 1.2, 0.8),
+      };
+
+      // DOM Elements
+      const choiceWindow = document.getElementById("choiceWindow");
+      const choicePrompt = document.getElementById("choicePrompt");
+      const patientCondition = document.getElementById("patientCondition");
+      const choiceOptions = document.getElementById("choiceOptions");
+
+      const feedbackPanel = document.getElementById("feedbackPanel");
+      const feedbackTitle = document.getElementById("feedbackTitle");
+      const feedbackMessage = document.getElementById("feedbackMessage");
+      const nextButton = document.getElementById("nextButton");
+
+      const hoverTooltip = document.getElementById("hoverTooltip");
+      const pulseValueUI = document.getElementById("pulseValue");
+
+      const condPulseUI = document.getElementById("condPulse");
+      const condBpUI = document.getElementById("condBp");
+      const condRespUI = document.getElementById("condResp");
+
+      // Scenarios
+      const scenarios = [
+        {
+          prompt: "What is your priority intervention?",
+          options: [
+            { text: "A. Perform a full head-to-toe assessment", correct: false, pulseChange: +8 },
+            { text: "B. Request a CT scan", correct: false, pulseChange: +10 },
+            { text: "C. Begin rapid IV fluid resuscitation", correct: true, pulseChange: -8 },
+            { text: "D. Ask the patient for their medical history", correct: false, pulseChange: +8 },
+          ],
+          correctFeedback:
+            "Correct! The patient shows signs of hypovolemic shock. Rapid IV fluid resuscitation helps restore circulating volume and support perfusion.",
+          incorrectFeedback:
+            "Not the priority. Delaying fluid resuscitation lets shock progress — beeping speeds up and the room dims slightly, but there's still time to recover.",
+          bpChange: { systolic: 0, diastolic: 0 },
+        },
+        {
+          prompt: "Which condition best explains the patient's presentation?",
+          options: [
+            { text: "A. Pneumothorax", correct: false, pulseChange: +10 },
+            { text: "B. Internal hemorrhage", correct: true, pulseChange: -10 },
+            { text: "C. Cardiac tamponade", correct: false, pulseChange: +10 },
+            { text: "D. Anxiety-induced hyperventilation", correct: false, pulseChange: +10 },
+          ],
+          correctFeedback:
+            "Correct! The mechanism of injury, abdominal rigidity, and signs of shock strongly suggest internal hemorrhage.",
+          incorrectFeedback:
+            "Incorrect. Vital signs deteriorate a little faster and breathing grows more strained, but the situation is still recoverable.",
+          bpChange: { systolic: -2, diastolic: -1 },
+        },
+        {
+          prompt: "Which type of shock is most consistent with this presentation?",
+          options: [
+            { text: "A. Hypovolemic shock", correct: true, pulseChange: -7 },
+            { text: "B. Cardiogenic shock", correct: false, pulseChange: +9 },
+            { text: "C. Septic shock", correct: false, pulseChange: +9 },
+            { text: "D. Neurogenic shock", correct: false, pulseChange: +9 },
+          ],
+          correctFeedback:
+            "Correct! Blood loss leads to hypovolemic shock, resulting in hypotension, tachycardia, and poor tissue perfusion.",
+          incorrectFeedback:
+            "Incorrect. The heartbeat indicator turns yellow and BP quietly drops a bit faster behind the scenes.",
+          bpChange: { systolic: -3, diastolic: -2 },
+        },
+        {
+          prompt: "Which assessment should guide immediate care?",
+          options: [
+            { text: "A. Head-to-toe assessment", correct: false, pulseChange: +7 },
+            { text: "B. ABCs / Primary survey", correct: true, pulseChange: -6 },
+            { text: "C. Pain assessment", correct: false, pulseChange: +7 },
+            { text: "D. Secondary survey", correct: false, pulseChange: +7 },
+          ],
+          correctFeedback:
+            "Correct! The primary survey (ABCs) identifies and treats immediate life-threatening conditions before further assessment.",
+          incorrectFeedback:
+            "Incorrect. Heart rate declines a bit more and alarms escalate sooner — stay focused on the ABCs.",
+          bpChange: { systolic: -2, diastolic: -1 },
+        },
+        {
+          prompt: "Which IV access is most appropriate for rapid fluid and blood administration?",
+          options: [
+            { text: "A. 24-gauge IV in the hand", correct: false, pulseChange: +12 },
+            { text: "B. 20-gauge IV in the wrist", correct: false, pulseChange: +10 },
+            { text: "C. 18-gauge IV in the antecubital vein", correct: true, pulseChange: -9 },
+            { text: "D. No IV – give oral fluids", correct: false, pulseChange: +16 },
+          ],
+          correctFeedback:
+            "Correct! Large-bore IV access allows rapid administration of IV fluids and blood products during trauma resuscitation.",
+          incorrectFeedback:
+            "\"IV too small, fluids infusing too slowly…\" Heart rate will drop a bit faster for the next two questions.",
+          bpChange: { systolic: -2, diastolic: -1 },
+          penalty: "ivPenalty",
+        },
+        {
+          prompt: "Which IV fluid is generally preferred for initial trauma resuscitation?",
+          options: [
+            { text: "A. D5W", correct: false, pulseChange: +8 },
+            { text: "B. Normal saline", correct: false, pulseChange: +6 },
+            { text: "C. Oral fluids", correct: false, pulseChange: +12 },
+            { text: "D. Lactated Ringer’s", correct: true, pulseChange: -7 },
+          ],
+          correctFeedback:
+            "Correct! Lactated Ringer’s is commonly used as an initial crystalloid fluid in trauma resuscitation to restore circulating volume.",
+          incorrectFeedback:
+            "Only minimal improvement in vitals — heart rate remains unstable.",
+          bpChange: { systolic: +1, diastolic: +1 }, // Minimal improvement if wrong
+        },
+        {
+          prompt: "The patient's BP continues to decline (now 78/54). What should you do next?",
+          options: [
+            { text: "A. Increase fluid rate", correct: false, pulseChange: +14 },
+            { text: "B. Prepare for emergency blood transfusion", correct: true, pulseChange: -12 },
+            { text: "C. Wait for the provider's assessment", correct: false, pulseChange: +18 },
+            { text: "D. Get a CT scan quickly", correct: false, pulseChange: +16 },
+          ],
+          correctFeedback:
+            "Correct! Persistent hypotension despite IV fluids suggests ongoing hemorrhage and the need for blood transfusion.",
+          incorrectFeedback:
+            "The heart rate indicator turns red and the alarm becomes continuous — one more wrong answer here will cause cardiac arrest.",
+          bpChange: { systolic: -10, diastolic: -6 },
+          critical: true,
+        },
+        {
+          prompt: "Which intervention is indicated at this time?",
+          options: [
+            { text: "A. Obtain a CT scan", correct: false, pulseChange: +12 },
+            { text: "B. Prepare for blood transfusion", correct: true, pulseChange: -10 },
+            { text: "C. Wait for laboratory results", correct: false, pulseChange: +15 },
+            { text: "D. Continue pain management", correct: false, pulseChange: +12 },
+          ],
+          correctFeedback:
+            "Correct! Blood transfusion is indicated when IV fluids alone fail to restore hemodynamic stability.",
+          incorrectFeedback:
+            "A sudden heart rate drop — breathing grows shallow and the patient enters a near-failure state.",
+          bpChange: { systolic: -5, diastolic: -3 },
+        },
+        {
+          prompt: "Why is CT imaging not the priority right now?",
+          options: [
+            { text: "A. CT takes too long to schedule", correct: false, pulseChange: +10 },
+            { text: "B. Imaging worsens bleeding", correct: false, pulseChange: +10 },
+            { text: "C. The patient is hemodynamically unstable", correct: true, pulseChange: -8 },
+            { text: "D. CT is only for fractures", correct: false, pulseChange: +12 },
+          ],
+          correctFeedback:
+            "Correct! Hemodynamically unstable patients should be stabilized before undergoing diagnostic imaging.",
+          incorrectFeedback:
+            "The heart rhythm becomes irregular and the visual vignette intensifies — one final chance remains.",
+          bpChange: { systolic: -5, diastolic: -3 },
+        },
+        {
+          prompt: "\"UNSTABLE VITALS – ACT NOW!\" What is your priority action?",
+          options: [
+            { text: "A. Comfort the patient", correct: false, pulseChange: +25 },
+            { text: "B. Document findings", correct: false, pulseChange: +25 },
+            { text: "C. Reassess temperature", correct: false, pulseChange: +25 },
+            { text: "D. Notify the trauma team immediately", correct: true, pulseChange: -15 },
+          ],
+          correctFeedback:
+            "Correct! Promptly notifying the trauma team ensures timely evaluation and definitive treatment.",
+          incorrectFeedback: "Flatline tone. The heartbeat number drops to zero — cardiac arrest.",
+          bpChange: { systolic: -10, diastolic: -5 },
+          final: true,
+        },
+      ];
+
+      // Initialize Game
+      function initGame() {
+        initBoilerplate();
+        loadAssets();
+        renderer.setAnimationLoop(renderLoop);
+        playBeatSoundByColor("pulse-yellow");
+      }
+
+      function yawFromQuaternion(q) {
+        const t3 = 2 * (q.w * q.y + q.z * q.x);
+        const t4 = 1 - 2 * (q.y * q.y + q.z * q.z);
+        return Math.atan2(t3, t4);
+      }
+
+      function quatFromYaw(yaw) {
+        const half = yaw * 0.5;
+        return { x: 0, y: Math.sin(half), z: 0, w: Math.cos(half) };
+      }
+
+      function recenterXRToFacePatient() {
+        if (!renderer || !patientModel) return false;
+
+        const frame = renderer.xr.getFrame?.();
+        const refSpace = renderer.xr.getReferenceSpace?.();
+        if (!frame || !refSpace) return false;
+
+        const pose = frame.getViewerPose(refSpace);
+        if (!pose) return false;
+
+        const p = pose.transform.position;
+        const o = pose.transform.orientation;
+        const headsetYaw = yawFromQuaternion(o);
+
+        const patientPos = new THREE.Vector3();
+        patientModel.getWorldPosition(patientPos);
+
+        const dx = patientPos.x - p.x;
+        const dz = patientPos.z - p.z;
+        const desiredYaw = Math.atan2(dx, dz);
+
+        const yawTune = Math.PI / 2;
+        const correction = desiredYaw - headsetYaw + yawTune;
+
+        const offsetRefSpace = refSpace.getOffsetReferenceSpace(
+          new XRRigidTransform({ x: 0, y: 0, z: 0 }, quatFromYaw(correction))
+        );
+
+        renderer.xr.setReferenceSpace(offsetRefSpace);
+        return true;
+      }
+
+      // Game Setup
+      function initBoilerplate() {
+        scene = new THREE.Scene();
+
+        rig = new THREE.Group();
+        scene.add(rig);
+
+        camera = new THREE.PerspectiveCamera(
+          70,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          10000
+        );
+        camera.position.copy(gameState.originalCameraPos);
+        rig.add(camera);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+
+        renderer.xr.enabled = true;
+        renderer.xr.setReferenceSpaceType("local-floor");
+
+        document.body.appendChild(renderer.domElement);
+
+        const vrBtn = VRButton.createButton(renderer, {
+          optionalFeatures: ["local-floor", "dom-overlay"],
+          domOverlay: { root: document.body },
+        });
+
+        vrBtn.style.position = "fixed";
+        vrBtn.style.left = "20px";
+        vrBtn.style.bottom = "20px";
+        vrBtn.style.zIndex = "100000";
+        document.body.appendChild(vrBtn);
+
+        renderer.xr.addEventListener("sessionstart", () => {
+          pendingRecenter = true;
+          controls.enabled = false;
+
+          if (vrPulseGroup) vrPulseGroup.visible = true;
+          updateVitalUI();
+        });
+
+        renderer.xr.addEventListener("sessionend", () => {
+          pendingRecenter = false;
+
+          requestAnimationFrame(() => {
+            if (vrPulseGroup) vrPulseGroup.visible = false;
+
+            rig.position.set(0, 0, 0);
+            rig.rotation.set(0, 0, 0);
+            rig.updateMatrixWorld(true);
+
+            camera.position.set(0, 2, -2);
+
+            camera.quaternion.set(-2.0, 0.85, 0.39, 5.657130561438501e-17);
+
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateMatrixWorld(true);
+
+            if (controls) {
+              controls.enabled = true;
+
+              const dist = camera.position.distanceTo(new THREE.Vector3(1.75, 0.75, 1.3));
+              const fwd = new THREE.Vector3(0, 0, -1)
+                .applyQuaternion(camera.quaternion)
+                .normalize();
+
+              controls.target.copy(camera.position).add(fwd.multiplyScalar(dist));
+              controls.update();
+            }
+
+            gameState.isZooming = false;
+          });
+        });
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 0.5;
+        controls.maxDistance = 8;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1;
+        controls.target.set(1.75, 0.75, 1.3);
+        controls.update();
+
+        raycaster = new THREE.Raycaster();
+        mouse = new THREE.Vector2();
+
+        window.addEventListener("mousemove", (e) => {
+          mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+          mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+          hoverTooltip.style.left = `${e.clientX + 10}px`;
+          hoverTooltip.style.top = `${e.clientY - 20}px`;
+        });
+
+        window.addEventListener("click", () => {
+          if (renderer.xr.isPresenting) return;
+          handleMouseClick();
+        });
+
+        // Lighting
+        ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        directionalLight = new THREE.DirectionalLight(0xffffdd, 1.5);
+        directionalLight.position.set(5, 8, 3);
+        emergencyLights = new THREE.PointLight(0xff4444, 0.3, 10);
+        emergencyLights.position.set(2, 3, 2);
+        scene.add(ambientLight, directionalLight, emergencyLights);
+
+        createVRUI();
+        setupVRControllers();
+
+        window.addEventListener("resize", onWindowResize);
+
+        nextButton.addEventListener("click", () => {
+          feedbackPanel.style.display = "none";
+          gameState.currentScenario++;
+
+          if (gameState.currentScenario > scenarios.length) {
+            endSimulation(true);
+            return;
+          }
+
+          showScenario(gameState.currentScenario - 1);
+        });
+      }
+
+      function setupVRControllers() {
+        controller1 = renderer.xr.getController(0);
+        controller2 = renderer.xr.getController(1);
+
+        controller1.addEventListener("selectstart", () =>
+          handleVRSelect(controller1)
+        );
+        controller2.addEventListener("selectstart", () =>
+          handleVRSelect(controller2)
+        );
+
+        controller1.add(buildLaser());
+        controller2.add(buildLaser());
+
+        scene.add(controller1);
+        scene.add(controller2);
+
+        controllerGrip1 = renderer.xr.getControllerGrip(0);
+        controllerGrip2 = renderer.xr.getControllerGrip(1);
+
+        controllerGrip1.add(
+          xrControllerModelFactory.createControllerModel(controllerGrip1)
+        );
+        controllerGrip2.add(
+          xrControllerModelFactory.createControllerModel(controllerGrip2)
+        );
+
+        scene.add(controllerGrip1);
+        scene.add(controllerGrip2);
+      }
+
+      function handleVRSelect(controller) {
+        if (vrEndGroup && vrEndGroup.visible) {
+          tryInteractWithMenu(controller);
+        } else if (vrFeedbackGroup && vrFeedbackGroup.visible) {
+          tryInteractWithMenu(controller);
+        } else if (vrMenuGroup && vrMenuGroup.visible) {
+          tryInteractWithMenu(controller);
+        } else {
+          tryActivatePatientFromController(controller);
+        }
+      }
+
+      function buildLaser() {
+        const geometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(0, 0, -1),
+        ]);
+
+        const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+        const line = new THREE.Line(geometry, material);
+
+        line.name = "laser";
+        line.scale.z = 5;
+
+        return line;
+      }
+
+      // VR UI Functions
+      function createVRUI() {
+        createVRMenu();
+        createVRPulseMonitor();
+        createVRFeedbackPanel();
+        createVREndScreen();
+      }
+
+      function createVRMenu() {
+        vrMenuGroup = new THREE.Group();
+        scene.add(vrMenuGroup);
+        vrMenuGroup.visible = false;
+
+        const panelGeo = new THREE.PlaneGeometry(1.2, 0.9);
+        const panelMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          opacity: 0.8,
+          transparent: true,
+          side: THREE.DoubleSide,
+        });
+
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        vrMenuGroup.add(panel);
+
+        const promptGeo = new THREE.PlaneGeometry(1.1, 0.15);
+        const promptMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const promptMesh = new THREE.Mesh(promptGeo, promptMat);
+
+        promptMesh.position.set(0, 0.35, 0.01);
+        promptMesh.name = "vrPrompt";
+        vrMenuGroup.add(promptMesh);
+
+        for (let i = 0; i < 4; i++) {
+          const btnGeo = new THREE.PlaneGeometry(1.0, 0.12);
+          const btnMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+          const btn = new THREE.Mesh(btnGeo, btnMat);
+
+          btn.position.set(0, 0.15 - i * 0.15, 0.01);
+          btn.userData = { isOption: true, index: i };
+
+          const labelGeo = new THREE.PlaneGeometry(1.0, 0.12);
+          const labelMat = new THREE.MeshBasicMaterial({ transparent: true });
+          const label = new THREE.Mesh(labelGeo, labelMat);
+
+          label.position.set(0, 0, 0.005);
+          btn.add(label);
+
+          vrUIButtons.push(btn);
+          vrMenuGroup.add(btn);
+        }
+      }
+
+      const _hudPos = new THREE.Vector3();
+      const _hudDir = new THREE.Vector3();
+      const _hudRight = new THREE.Vector3();
+      const _hudUp = new THREE.Vector3();
+
+      function placePulseHUD() {
+        if (!renderer?.xr?.isPresenting || !vrPulseGroup) return;
+
+        const xrCam = renderer.xr.getCamera(camera);
+
+        xrCam.getWorldPosition(_hudPos);
+        xrCam.getWorldDirection(_hudDir).normalize();
+
+        _hudUp.set(0, 1, 0).applyQuaternion(xrCam.quaternion).normalize();
+        _hudRight.crossVectors(_hudDir, _hudUp).normalize();
+
+        const forward = 1.0;
+        const up = 0.8;
+        const right = 0.00;
+
+        vrPulseGroup.position.copy(_hudPos)
+          .add(_hudDir.multiplyScalar(forward))
+          .add(_hudUp.multiplyScalar(up))
+          .add(_hudRight.multiplyScalar(right));
+
+        vrPulseGroup.quaternion.copy(xrCam.quaternion);
+      }
+
+
+      function createVRPulseMonitor() {
+        vrPulseGroup = new THREE.Group();
+        scene.add(vrPulseGroup);
+
+        const bgGeo = new THREE.PlaneGeometry(0.6, 0.3);
+        const bgMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          opacity: 0.6,
+          transparent: true,
+          side: THREE.DoubleSide,
+        });
+
+        const bg = new THREE.Mesh(bgGeo, bgMat);
+        vrPulseGroup.add(bg);
+
+        const textGeo = new THREE.PlaneGeometry(0.55, 0.25);
+        const textMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const textMesh = new THREE.Mesh(textGeo, textMat);
+
+        textMesh.position.z = 0.01;
+        textMesh.name = "pulseText";
+        vrPulseGroup.add(textMesh);
+
+        vrPulseGroup.visible = false;
+      }
+
+      function createVRFeedbackPanel() {
+        vrFeedbackGroup = new THREE.Group();
+        scene.add(vrFeedbackGroup);
+        vrFeedbackGroup.visible = false;
+
+        const panelGeo = new THREE.PlaneGeometry(1.0, 0.8);
+        const panelMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          opacity: 0.9,
+          transparent: true,
+          side: THREE.DoubleSide,
+        });
+
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        panel.name = "feedbackBg";
+        vrFeedbackGroup.add(panel);
+
+        const titleGeo = new THREE.PlaneGeometry(0.9, 0.15);
+        const titleMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const title = new THREE.Mesh(titleGeo, titleMat);
+
+        title.position.set(0, 0.25, 0.01);
+        title.name = "feedbackTitle";
+        vrFeedbackGroup.add(title);
+
+        const msgGeo = new THREE.PlaneGeometry(0.9, 0.3);
+        const msgMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const msg = new THREE.Mesh(msgGeo, msgMat);
+
+        msg.position.set(0, 0, 0.01);
+        msg.name = "feedbackMsg";
+        vrFeedbackGroup.add(msg);
+
+        const btnGeo = new THREE.PlaneGeometry(0.4, 0.12);
+        const btnMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+        const btn = new THREE.Mesh(btnGeo, btnMat);
+
+        btn.position.set(0, -0.25, 0.01);
+        btn.userData = { isContinue: true };
+
+        const labelGeo = new THREE.PlaneGeometry(0.4, 0.12);
+        const labelMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const label = new THREE.Mesh(labelGeo, labelMat);
+
+        label.position.set(0, 0, 0.005);
+        label.material.map = createTextTexture("CONTINUE", 256, 64, null, "white", 20);
+        label.material.needsUpdate = true;
+
+        btn.add(label);
+
+        vrFeedbackButtons.push(btn);
+        vrFeedbackGroup.add(btn);
+      }
+
+      function createVREndScreen() {
+        vrEndGroup = new THREE.Group();
+        scene.add(vrEndGroup);
+        vrEndGroup.visible = false;
+
+        const panelGeo = new THREE.PlaneGeometry(2.0, 1.5);
+        const panelMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          opacity: 0.95,
+          transparent: true,
+          side: THREE.DoubleSide,
+        });
+
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        vrEndGroup.add(panel);
+
+        const titleGeo = new THREE.PlaneGeometry(1.5, 0.3);
+        const titleMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const title = new THREE.Mesh(titleGeo, titleMat);
+
+        title.position.set(0, 0.4, 0.01);
+        title.name = "endTitle";
+        vrEndGroup.add(title);
+
+        const msgGeo = new THREE.PlaneGeometry(1.5, 0.5);
+        const msgMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const msg = new THREE.Mesh(msgGeo, msgMat);
+
+        msg.position.set(0, -0.1, 0.01);
+        msg.name = "endMsg";
+        vrEndGroup.add(msg);
+
+        const btnGeo = new THREE.PlaneGeometry(0.6, 0.15);
+        const btnMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+        const btn = new THREE.Mesh(btnGeo, btnMat);
+
+        btn.position.set(0, -0.5, 0.01);
+        btn.userData = { isRestart: true };
+
+        const labelGeo = new THREE.PlaneGeometry(0.6, 0.15);
+        const labelMat = new THREE.MeshBasicMaterial({ transparent: true });
+        const label = new THREE.Mesh(labelGeo, labelMat);
+
+        label.position.set(0, 0, 0.005);
+        label.material.map = createTextTexture("PLAY AGAIN", 512, 128, null, "white", 40);
+        label.material.needsUpdate = true;
+
+        btn.add(label);
+
+        vrEndButtons.push(btn);
+        vrEndGroup.add(btn);
+      }
+
+      function createTextTexture(text, width, height, bgColor, textColor, fontSize) {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+
+        if (bgColor) {
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(0, 0, width, height);
+        }
+
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.fillStyle = textColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        ctx.fillText(text, width / 2, height / 2);
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      function updateVRPulse(pulse, colorHex) {
+        if (!vrPulseGroup) return;
+
+        const textMesh = vrPulseGroup.getObjectByName("pulseText");
+        textMesh.material.map = createTextTexture(`PULSE: ${pulse} BPM`, 512, 256, null, colorHex, 60);
+
+        textMesh.material.needsUpdate = true;
+      }
+
+      function updateVRFeedback(isCorrect, message) {
+        if (!vrFeedbackGroup) return;
+
+        const titleMesh = vrFeedbackGroup.getObjectByName("feedbackTitle");
+        const msgMesh = vrFeedbackGroup.getObjectByName("feedbackMsg");
+        const bgMesh = vrFeedbackGroup.getObjectByName("feedbackBg");
+
+        const titleColor = isCorrect ? "#00ff9d" : "#ff4444";
+        const titleText = isCorrect ? "CORRECT" : "INCORRECT";
+
+        titleMesh.material.map = createTextTexture(
+          titleText,
+          512,
+          128,
+          null,
+          titleColor,
+          50
+        );
+        titleMesh.material.needsUpdate = true;
+
+        msgMesh.material.map = createTextTexture(
+          message,
+          1024,
+          256,
+          null,
+          "white",
+          30
+        );
+        msgMesh.material.needsUpdate = true;
+
+        bgMesh.material.color.setHex(isCorrect ? 0x002200 : 0x220000);
+      }
+
+      function updateVREnd(isSuccess, message) {
+        if (!vrEndGroup) return;
+
+        const titleMesh = vrEndGroup.getObjectByName("endTitle");
+        const msgMesh = vrEndGroup.getObjectByName("endMsg");
+
+        const titleColor = isSuccess ? "#00ff9d" : "#ff4444";
+        const titleText = isSuccess ? "SUCCESS" : "FAILURE";
+
+        titleMesh.material.map = createTextTexture(
+          titleText,
+          1024,
+          256,
+          null,
+          titleColor,
+          80
+        );
+        titleMesh.material.needsUpdate = true;
+
+        msgMesh.material.map = createTextTexture(
+          message,
+          1024,
+          512,
+          null,
+          "white",
+          40
+        );
+        msgMesh.material.needsUpdate = true;
+      }
+
+      function updateVRMenu(index) {
+        const scenario = scenarios[index];
+        const promptMesh = vrMenuGroup.getObjectByName("vrPrompt");
+        promptMesh.material.map = createTextTexture(
+          scenario.prompt,
+          1024,
+          128,
+          null,
+          "#ff4444",
+          40
+        );
+        promptMesh.material.needsUpdate = true;
+
+        scenario.options.forEach((opt, i) => {
+          const btn = vrUIButtons[i];
+          const label = btn.children[0];
+
+          label.material.map = createTextTexture(opt.text, 1024, 128, null, "white", 35);
+          label.material.needsUpdate = true;
+
+          btn.userData.correct = opt.correct;
+          btn.userData.pulseChange = opt.pulseChange;
+          btn.userData.scenarioIndex = index;
+
+          btn.material.color.setHex(0x333333);
+        });
+      }
+
+      function tryInteractWithMenu(controller) {
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+        if (vrEndGroup && vrEndGroup.visible) {
+          const intersects = raycaster.intersectObjects(vrEndButtons, true);
+          if (intersects.length > 0) {
+            audioElements.flatline.pause();
+            location.reload();
+          }
+          return;
+        }
+
+        if (vrFeedbackGroup && vrFeedbackGroup.visible) {
+          const intersects = raycaster.intersectObjects(
+            vrFeedbackButtons,
+            true
+          );
+          if (intersects.length > 0) {
+            vrFeedbackGroup.visible = false;
+            gameState.currentScenario++;
+            if (gameState.currentScenario > scenarios.length) {
+              endSimulation(true);
+            } else {
+              showScenario(gameState.currentScenario - 1);
+            }
+          }
+          return;
+        }
+
+        const intersects = raycaster.intersectObjects(vrUIButtons, true);
+
+        if (intersects.length > 0) {
+          let target = intersects[0].object;
+          if (target.parent && target.parent.userData.isOption) {
+            target = target.parent;
+          }
+
+          if (target.userData.isOption) {
+            handleAnswer(
+              target.userData.scenarioIndex,
+              target.userData.correct,
+              target.userData.pulseChange
+            );
+          }
+        }
+      }
+
+      function updateLaserAndTryHit(controller) {
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+        let intersects = [];
+
+        if (vrEndGroup && vrEndGroup.visible) {
+          intersects = raycaster.intersectObjects(vrEndButtons, true);
+        } else if (vrFeedbackGroup && vrFeedbackGroup.visible) {
+          intersects = raycaster.intersectObjects(vrFeedbackButtons, true);
+        } else if (vrMenuGroup && vrMenuGroup.visible) {
+          intersects = raycaster.intersectObjects(vrUIButtons, true);
+        } else if (patientModel) {
+          intersects = raycaster.intersectObject(patientModel, true);
+        }
+
+        const laser = controller.getObjectByName("laser");
+        if (laser) {
+          laser.scale.z = intersects.length ? intersects[0].distance : 5;
+
+          if (intersects.length > 0) {
+            laser.material.color.setHex(0xff0000);
+          } else {
+            laser.material.color.setHex(0xffffff);
+          }
+        }
+      }
+
+      function tryActivatePatientFromController(controller) {
+        if (
+          !patientModel ||
+          gameState.firstQuestionTriggered ||
+          gameState.isZooming
+        )
+          return;
+
+        tempMatrix.identity().extractRotation(controller.matrixWorld);
+        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+        const intersects = raycaster.intersectObject(patientModel, true);
+        if (intersects.length === 0) return;
+
+        gameState.firstQuestionTriggered = true;
+        hoverTooltip.style.display = "none";
+
+        if (renderer.xr.isPresenting) {
+          showScenario(0);
+        } else {
+          zoomToPatient(() => {
+            showScenario(0);
+          });
+        }
+      }
+
+      function loadAssets() {
+        const loader = new GLTFLoader();
+        loader.load(
+          "er_room.glb",
+          (gltf) => {
+            erRoom = gltf.scene;
+            erRoom.scale.set(1, 1, 1);
+            erRoom.position.y = 0;
+            scene.add(erRoom);
+            loadPatient();
+          },
+          (xhr) =>
+            console.log(
+              `ER Room: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+            ),
+          (error) => alert("Failed to load er_room.glb")
+        );
+      }
+
+      function loadPatient() {
+        const loader = new GLTFLoader();
+        loader.load(
+          "patient.glb",
+          (gltf) => {
+            patientModel = gltf.scene;
+            patientModel.scale.set(0.022, 0.022, 0.022);
+            patientModel.position.set(1.75, 0.75, 1.3);
+            patientModel.rotation.y = Math.PI;
+            scene.add(patientModel);
+            controls.target.copy(patientModel.position);
+            startGame();
+          },
+          (xhr) =>
+            console.log(
+              `Patient: ${((xhr.loaded / xhr.total) * 100).toFixed(1)}%`
+            ),
+          (error) => alert("Failed to load patient.glb")
+        );
+      }
+
+      function startGame() {
+        console.log("Game started! Click patient to begin assessment.");
+        gameState.lastVitalUpdate = Date.now();
+        updateVitalUI();
+      }
+
+      function handleMouseClick() {
+        if (
+          !patientModel ||
+          gameState.firstQuestionTriggered ||
+          gameState.isZooming
+        )
+          return;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(patientModel, true);
+
+        if (intersects.length > 0) {
+          gameState.firstQuestionTriggered = true;
+          hoverTooltip.style.display = "none";
+
+          zoomToPatient(() => {
+            showScenario(0);
+          });
+        }
+      }
+
+      function checkPatientHover() {
+        if (renderer && renderer.xr && renderer.xr.isPresenting) {
+          hoverTooltip.style.display = "none";
+          return;
+        }
+
+        if (
+          !patientModel ||
+          gameState.firstQuestionTriggered ||
+          gameState.isZooming ||
+          choiceWindow.style.display === "block"
+        ) {
+          hoverTooltip.style.display = "none";
+          return;
+        }
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(patientModel, true);
+        hoverTooltip.style.display = intersects.length > 0 ? "block" : "none";
+      }
+
+      function zoomToPatient(callback) {
+        gameState.isZooming = true;
+        controls.enabled = false;
+        const duration = 1000;
+        const startTime = Date.now();
+        const originalPos = camera.position.clone();
+        const targetPos = new THREE.Vector3(0.5, 1.2, 0.8);
+
+        function animateZoom() {
+          const elapsed = Date.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easeProgress = easeInOutCubic(progress);
+          camera.position.lerpVectors(originalPos, targetPos, easeProgress);
+
+          if (progress < 1) {
+            requestAnimationFrame(animateZoom);
+          } else {
+            gameState.isZooming = false;
+            controls.enabled = !(
+              renderer &&
+              renderer.xr &&
+              renderer.xr.isPresenting
+            );
+            if (callback) callback();
+          }
+        }
+        animateZoom();
+      }
+
+      function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+
+      function showScenario(index) {
+        const scenario = scenarios[index];
+        choicePrompt.textContent = scenario.prompt;
+        choiceOptions.innerHTML = "";
+
+        vitals.bpSystolic = Math.max(
+          60,
+          vitals.bpSystolic + scenario.bpChange.systolic
+        );
+        vitals.bpDiastolic = Math.max(
+          40,
+          vitals.bpDiastolic + scenario.bpChange.diastolic
+        );
+
+        scenario.options.forEach((option) => {
+          const div = document.createElement("div");
+          div.className = "choice-option";
+          div.textContent = option.text;
+          div.addEventListener("click", () =>
+            handleAnswer(index, option.correct, option.pulseChange)
+          );
+          choiceOptions.appendChild(div);
+        });
+
+        updateVitalUI();
+
+        if (renderer.xr.isPresenting) {
+          updateVRMenu(index);
+
+          const xrCam = renderer.xr.getCamera(camera);
+          const camPos = new THREE.Vector3();
+          const camDir = new THREE.Vector3();
+          xrCam.getWorldPosition(camPos);
+          xrCam.getWorldDirection(camDir);
+          camDir.y = 0;
+          camDir.normalize();
+
+          vrMenuGroup.position.copy(camPos).add(camDir.multiplyScalar(1.5));
+          vrMenuGroup.position.y = 1.6;
+          vrMenuGroup.lookAt(camPos.x, vrMenuGroup.position.y, camPos.z);
+
+          vrMenuGroup.visible = true;
+        } else {
+          choiceWindow.style.display = "block";
+        }
+      }
+
+      function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
+        const scenario = scenarios[scenarioIndex];
+        choiceWindow.style.display = "none";
+
+        if (vrMenuGroup) vrMenuGroup.visible = false;
+
+        // Stop heavy breathing after first question is answered
+        if (scenarioIndex === 0) {
+          audioElements.heavyBreathing.pause();
+          audioElements.heavyBreathing.currentTime = 0;
+        }
+
+        if (gameState.ivPenaltyActive) {
+          pulseChange *= 1.5;
+          gameState.penaltyQuestionCount++;
+
+          if (gameState.penaltyQuestionCount >= 2) {
+            gameState.ivPenaltyActive = false;
+            gameState.penaltyQuestionCount = 0;
+          }
+        }
+
+        if (isCorrect) {
+          vitals.pulse = Math.max(PULSE_MIN, vitals.pulse + pulseChange);
+          vitals.consecutiveWrongAnswers = 0;
+          feedbackTitle.textContent = "CORRECT";
+          feedbackTitle.style.color = "#00ff9d";
+          feedbackMessage.textContent = scenario.correctFeedback;
+          feedbackPanel.className = "feedback-panel feedback-correct";
+        } else {
+          vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseChange);
+          vitals.consecutiveWrongAnswers++;
+
+          if (scenario.critical && vitals.consecutiveWrongAnswers >= 2) {
+            endSimulation(false);
+            return;
+          }
+
+          if (scenario.final) {
+            endSimulation(false);
+            return;
+          }
+
+          feedbackTitle.textContent = "INCORRECT";
+          feedbackTitle.style.color = "#ff4444";
+          feedbackMessage.textContent = scenario.incorrectFeedback;
+          feedbackPanel.className = "feedback-panel feedback-incorrect";
+
+          if (scenario.penalty === "ivPenalty") {
+            gameState.ivPenaltyActive = true;
+            gameState.penaltyQuestionCount = 0;
+          }
+        }
+
+        updateVitalUI();
+
+        if (renderer.xr.isPresenting) {
+          updateVRFeedback(
+            isCorrect,
+            isCorrect ? scenario.correctFeedback : scenario.incorrectFeedback
+          );
+
+          if (vrMenuGroup) {
+            vrFeedbackGroup.position.copy(vrMenuGroup.position);
+            vrFeedbackGroup.rotation.copy(vrMenuGroup.rotation);
+          }
+          vrFeedbackGroup.visible = true;
+        } else {
+          feedbackPanel.style.display = "block";
+        }
+
+        if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
+          endSimulation(false);
+        }
+      }
+
+      function updateVitalUI() {
+        const displayPulse = Math.round(vitals.pulse);
+
+        pulseValueUI.textContent = displayPulse;
+        condBpUI.textContent = `${vitals.bpSystolic}/${vitals.bpDiastolic}`;
+        condRespUI.textContent = vitals.respirations;
+
+        const animationSpeed = 60 / displayPulse;
+        pulseValueUI.style.animationDuration = `${animationSpeed}s`;
+
+        pulseValueUI.classList.remove(
+          "pulse-green",
+          "pulse-yellow",
+          "pulse-red"
+        );
+        let currentColorClass = "";
+        let colorHex = "#00ff9d";
+        if (displayPulse >= 100 && displayPulse <= 120) {
+          currentColorClass = "pulse-green";
+          colorHex = "#00ff9d";
+          pulseValueUI.classList.add(currentColorClass);
+        } else if (
+          (displayPulse > 120 && displayPulse <= 140) ||
+          (displayPulse < 100 && displayPulse >= 80)
+        ) {
+          currentColorClass = "pulse-yellow";
+          colorHex = "#ffff00";
+          pulseValueUI.classList.add(currentColorClass);
+        } else {
+          currentColorClass = "pulse-red";
+          colorHex = "#ff4444";
+          pulseValueUI.classList.add(currentColorClass);
+        }
+
+        updateVRPulse(displayPulse, colorHex);
+
+        if (vrPulseGroup && renderer.xr.isPresenting)
+          vrPulseGroup.visible = true;
+
+        playBeatSoundByColor(currentColorClass);
+
+        vitals.lastPulseChange = Date.now();
+      }
+
+      // Returns true while the player has a decision prompt or feedback message
+      // open (2D or VR). Passive vital decay is paused during this time so the
+      // player always has as long as they need to read and decide - only actual
+      // wrong answers should worsen the patient, not the clock ticking in the
+      // background while reading.
+      function isDecisionUIOpen() {
+        return (
+          choiceWindow.style.display === "block" ||
+          feedbackPanel.style.display === "block" ||
+          (vrMenuGroup && vrMenuGroup.visible) ||
+          (vrFeedbackGroup && vrFeedbackGroup.visible) ||
+          (vrEndGroup && vrEndGroup.visible)
+        );
+      }
+
+      function updateVitals() {
+        const now = Date.now();
+
+        // Don't let vitals silently decay while the player is reading a
+        // question or the feedback for their last answer - give real time
+        // to think, the way an actual nurse would have a moment to assess.
+        if (isDecisionUIOpen()) {
+          gameState.lastVitalUpdate = now;
+          return;
+        }
+
+        const interval = gameState.ivPenaltyActive
+          ? gameState.vitalDropInterval / 2
+          : gameState.vitalDropInterval;
+
+        if (now - gameState.lastVitalUpdate > interval) {
+          const pulseDrop = gameState.ivPenaltyActive ? 3 : 2;
+          vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseDrop);
+
+          vitals.bpSystolic = Math.max(60, vitals.bpSystolic - 2);
+          vitals.bpDiastolic = Math.max(40, vitals.bpDiastolic - 1);
+          vitals.respirations = Math.min(40, vitals.respirations + 1);
+
+          updateVitalUI();
+          console.log("Vitals worsened | Pulse:", vitals.pulse);
+
+          if (vitals.pulse === PULSE_MAX || vitals.pulse === PULSE_MIN) {
+            endSimulation(false);
+          }
+
+          gameState.lastVitalUpdate = now;
+        }
+      }
+
+      function endSimulation(isSuccess) {
+        choiceWindow.style.display = "none";
+        feedbackPanel.style.display = "none";
+
+        audioElements.background.pause();
+        stopAllBeatSounds();
+
+        if (!isSuccess) {
+          audioElements.flatline.play().catch((err) => {
+            console.log("Flatline audio play failed:", err);
+          });
+        }
+
+        if (renderer.xr.isPresenting) {
+          const msg = isSuccess
+            ? "Correct prioritization under pressure prevented cardiac arrest."
+            : "Delayed or incorrect decisions resulted in patient death.";
+
+          updateVREnd(isSuccess, msg);
+
+          const xrCam = renderer.xr.getCamera(camera);
+          const camPos = new THREE.Vector3();
+          const camDir = new THREE.Vector3();
+          xrCam.getWorldPosition(camPos);
+          xrCam.getWorldDirection(camDir);
+          camDir.y = 0;
+          camDir.normalize();
+
+          vrEndGroup.position.copy(camPos).add(camDir.multiplyScalar(1.5));
+          vrEndGroup.position.y = 1.6;
+          vrEndGroup.lookAt(camPos.x, vrEndGroup.position.y, camPos.z);
+
+          vrEndGroup.visible = true;
+
+          if (vrPulseGroup) vrPulseGroup.visible = false;
+          if (vrMenuGroup) vrMenuGroup.visible = false;
+          if (vrFeedbackGroup) vrFeedbackGroup.visible = false;
+        }
+
+        const endScreen = document.createElement("div");
+        endScreen.style.position = "fixed";
+        endScreen.style.top = "0";
+        endScreen.style.left = "0";
+        endScreen.style.width = "100vw";
+        endScreen.style.height = "100vh";
+        endScreen.style.backgroundColor = isSuccess
+          ? "rgba(0, 0, 0, 0.9)"
+          : "rgba(0, 0, 0, 0.95)";
+        endScreen.style.display = "flex";
+        endScreen.style.flexDirection = "column";
+        endScreen.style.justifyContent = "center";
+        endScreen.style.alignItems = "center";
+        endScreen.style.zIndex = "9999";
+        endScreen.style.color = "white";
+        endScreen.style.fontFamily = "Arial, sans-serif";
+        endScreen.style.textAlign = "center";
+        endScreen.style.padding = "2rem";
+        endScreen.style.animation = isSuccess
+          ? "none"
+          : "fadeToBlack 2s forwards";
+
+        if (isSuccess) {
+          endScreen.style.background = "rgba(0, 0, 0, 0.7)";
+        } else {
+          endScreen.style.background = "black";
+        }
+
+        const endTitle = document.createElement("h2");
+        endTitle.style.fontSize = "2.5rem";
+        endTitle.style.marginBottom = "1.5rem";
+        endTitle.style.color = isSuccess ? "#00ff9d" : "#ff4444";
+        endTitle.textContent = isSuccess ? "SUCCESS" : "FAILURE";
+
+        const endMessage = document.createElement("p");
+        endMessage.style.fontSize = "1.2rem";
+        endMessage.style.maxWidth = "600px";
+        endMessage.style.lineHeight = "1.6";
+        endMessage.textContent = isSuccess
+          ? "Correct prioritization under pressure prevented cardiac arrest."
+          : "Delayed or incorrect decisions resulted in patient death.";
+
+        const restartButton = document.createElement("button");
+
+        restartButton.style.marginTop = "2rem";
+        restartButton.style.padding = "1rem 3rem";
+        restartButton.style.fontSize = "1.2rem";
+        restartButton.style.fontWeight = "bold";
+        restartButton.style.color = "white";
+        restartButton.style.backgroundColor = "#ff4444";
+        restartButton.style.border = "none";
+        restartButton.style.borderRadius = "5px";
+        restartButton.style.cursor = "pointer";
+        restartButton.textContent = "Play Again";
+
+        restartButton.addEventListener("click", () => {
+          audioElements.flatline.pause();
+          location.reload();
+        });
+
+        endScreen.appendChild(endTitle);
+        endScreen.appendChild(endMessage);
+        endScreen.appendChild(restartButton);
+        document.body.appendChild(endScreen);
+      }
+
+      const style = document.createElement("style");
+      style.textContent = `
+      @keyframes fadeToBlack {
+        from { background: rgba(0, 0, 0, 0.5); }
+        to { background: #000; }
+      }`;
+
+      document.head.appendChild(style);
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+      }
+
+      function renderLoop() {
+        if (pendingRecenter && renderer.xr.isPresenting && patientModel) {
+          if (recenterXRToFacePatient()) pendingRecenter = false;
+        }
+
+        if (!renderer.xr.isPresenting) {
+          controls.update();
+        }
+
+        emergencyLights.intensity = 0.3 + Math.sin(Date.now() * 0.001) * 0.1;
+
+        updateVitals();
+        checkPatientHover();
+
+        if (renderer.xr.isPresenting && !gameState.firstQuestionTriggered) {
+          if (controller1) updateLaserAndTryHit(controller1);
+          if (controller2) updateLaserAndTryHit(controller2);
+        }
+        if (renderer.xr.isPresenting) {
+          placePulseHUD();
+        }
+
+        renderer.render(scene, camera);
+      }
     </script>
-
-    <!-- ── Main Entry Point ──────────────────────────────── -->
-    <script type="module" src="main.js"></script>
-
   </body>
 </html>
