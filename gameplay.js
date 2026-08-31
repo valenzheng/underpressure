@@ -237,7 +237,7 @@ function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
     spawnParticles("drip");
     // Correct answers move pulse toward stable target (~110), not raw subtraction.
     // This prevents pulse from bottoming out on a perfect run.
-    const STABLE_TARGET = 110;
+    const STABLE_TARGET = 100;  // center of green zone per design doc (80-120 BPM)
     const gap = vitals.pulse - STABLE_TARGET;
     // Move 30-50% of the gap toward target (the pulseChange magnitude controls intensity)
     const stabilizeAmount = gap * 0.35;
@@ -251,7 +251,7 @@ function handleAnswer(scenarioIndex, isCorrect, pulseChange) {
     vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseChange);
     vitals.consecutiveWrongAnswers++;
 
-    if (scenario.critical && vitals.consecutiveWrongAnswers >= 2) {
+    if (scenario.critical && vitals.consecutiveWrongAnswers >= 3) {
       endSimulation(false);
       return;
     }
@@ -329,18 +329,17 @@ function updateVitalUI() {
   );
   let currentColorClass = "";
   let colorHex = "#00ff9d";
-  if (displayPulse >= 100 && displayPulse <= 120) {
+  // Design doc: Green 80-120 BPM | Yellow 120-140 or rapidly changing | Red <80 BPM
+  if (displayPulse >= 80 && displayPulse <= 120) {
     currentColorClass = "pulse-green";
     colorHex = "#00ff9d";
     pulseValueUI.classList.add(currentColorClass);
-  } else if (
-    (displayPulse > 120 && displayPulse <= 140) ||
-    (displayPulse < 100 && displayPulse >= 80)
-  ) {
+  } else if (displayPulse > 120 && displayPulse <= 140) {
     currentColorClass = "pulse-yellow";
     colorHex = "#ffff00";
     pulseValueUI.classList.add(currentColorClass);
   } else {
+    // < 80 BPM or > 140 BPM — critical
     currentColorClass = "pulse-red";
     colorHex = "#ff4444";
     pulseValueUI.classList.add(currentColorClass);
@@ -377,12 +376,15 @@ function updateVitals() {
     : gameState.vitalDropInterval;
 
   if (now - gameState.lastVitalUpdate > interval) {
-    const pulseDrop = gameState.ivPenaltyActive ? 3 : 1;  // gentle passive decay
+    // Passive decay: very gentle upward drift in pulse to create tension
+    // but NOT enough to kill on its own — only wrong answers drive death.
+    const pulseDrop = gameState.ivPenaltyActive ? 2 : 1;
     vitals.pulse = Math.min(PULSE_MAX, vitals.pulse + pulseDrop);
 
-    vitals.bpSystolic = Math.max(60, vitals.bpSystolic - 2);
-    vitals.bpDiastolic = Math.max(40, vitals.bpDiastolic - 1);
-    vitals.respirations = Math.min(40, vitals.respirations + 1);
+    // BP and resp drift slowly
+    vitals.bpSystolic  = Math.max(65, vitals.bpSystolic  - 1);
+    vitals.bpDiastolic = Math.max(42, vitals.bpDiastolic - 1);
+    vitals.respirations = Math.min(38, vitals.respirations + 1);
 
     updateVitalUI();
     console.log("Vitals worsened | Pulse:", vitals.pulse);
@@ -390,9 +392,7 @@ function updateVitals() {
     if (vitals.pulse >= PULSE_MAX || vitals.pulse <= PULSE_MIN) {
       endSimulation(false);
     }
-    if (vitals.bpSystolic <= 65) {
-      endSimulation(false);
-    }
+    // BP floor is informational only — pulse threshold drives death.
 
     gameState.lastVitalUpdate = now;
   }
@@ -689,9 +689,9 @@ function endSimulation(isSuccess) {
   endTitle.style.marginBottom = "0.3rem";
   endTitle.style.color = isSuccess ? "#00ff9d" : "#ff4444";
   if (currentPatient === 1) {
-    endTitle.textContent = isSuccess ? "Patient Stabilized Successfully" : "Patient Deteriorated to Cardiac Arrest";
+    endTitle.textContent = isSuccess ? "Patient Stabilized" : "Patient Deteriorated to Cardiac Arrest";
   } else {
-    endTitle.textContent = isSuccess ? "Patient Stabilized Successfully" : "Patient Deteriorated to Cardiac Arrest";
+    endTitle.textContent = isSuccess ? "Patient Stabilized" : "Patient Deteriorated to Cardiac Arrest";
   }
 
   const endMessage = document.createElement("p");
