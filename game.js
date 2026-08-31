@@ -206,7 +206,7 @@ function initBoilerplate() {
   directionalLight.shadow.camera.near = 0.5;
   directionalLight.shadow.camera.far = 30;
 
-  // Overhead ceiling fill 
+  // Overhead ceiling fill — simulates fluorescent banks
   const ceilingLight1 = new THREE.PointLight(0xe8f4ff, 3.0, 12);
   ceilingLight1.position.set(0, 5, 1);
   const ceilingLight2 = new THREE.PointLight(0xe8f4ff, 2.5, 12);
